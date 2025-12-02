@@ -20,6 +20,7 @@ using namespace Dem;
 
 class DemBonesModel : public DemBonesExt<double, float> {
 public:
+	using Super = DemBonesExt<double, float>;
 	int sF = 1001;
 	int eF = 1010;
 	vector<string> bonesMaya;
@@ -30,6 +31,7 @@ public:
 
 	double tolerance;
 	int patience;
+	char * lockWeightsSet = "demLock";
 
 	DemBonesModel() : tolerance(1e-3), patience(3) { nIters = 30; clear(); }
 
@@ -150,7 +152,7 @@ public:
 		}
 
 		// update model: weights locked
-		MString colourSet = "demLock";
+		MString colourSet = lockWeightsSet;
 		if (mesh.hasColorChannels(colourSet)) {
 			MColorArray colours;
 			status = mesh.getVertexColors(colours, &colourSet);
@@ -467,6 +469,7 @@ private:
 PYBIND11_MODULE(_core, m) {
 	py::class_<DemBonesModel>(m, "DemBones")
 		.def(py::init<>())
+		.def_readwrite("bind_update", &DemBonesModel::bindUpdate, "Bind transformation update, 0=keep original, 1=set translations to p-norm centroids (using #transAffineNorm) and rotations to identity, 2=do 1 and group joints, default = 0")
 		.def_readwrite("num_iterations", &DemBonesModel::nIters, "Number of global iterations, default = 30")
 		.def_readwrite("num_transform_iterations", &DemBonesModel::nTransIters, "Number of bone transformations update iterations per global iteration, default = 5")
 		.def_readwrite("translation_affine", &DemBonesModel::transAffine, "Translations affinity soft constraint, default = 10.0")
@@ -476,6 +479,9 @@ PYBIND11_MODULE(_core, m) {
 		.def_readwrite("weights_smooth", &DemBonesModel::weightsSmooth, "Weights smoothness soft constraint, default = 1e-4")
 		.def_readwrite("weights_smooth_step", &DemBonesModel::weightsSmoothStep, "Step size for the weights smoothness soft constraint, default = 1.0")
 		.def_readwrite("weights_epsilon", &DemBonesModel::weightEps, "Epsilon for weights solver, default = 1e-15")
+		.def_readwrite("tolerance", &DemBonesModel::tolerance, "Convergence tolerance, default = 1e-3")
+		.def_readwrite("patience", &DemBonesModel::patience, "Number of iterations to wait before declaring convergence, default = 3")
+		.def_readwrite("lock_weights_set", &DemBonesModel::lockWeightsSet, "Name of the color set used to lock weights, default = 'demLock'")
 		.def_readonly("start_frame", &DemBonesModel::sF, "Start frame of solver")
 		.def_readonly("end_frame", &DemBonesModel::eF, "End frame of solver")
 		.def_readonly("influences", &DemBonesModel::bonesMaya, "List of all influences")

@@ -1,0 +1,29 @@
+from typing import List
+
+class DemBones:
+    bind_update: int
+    lock_weights_set: str
+    max_influences: int
+    num_iterations: int
+    num_transform_iterations: int
+    num_weight_iterations: int
+    patience: int
+    tolerance: float
+    translation_affine: float
+    translation_affine_norm: float
+    weights_epsilon: float
+    weights_smooth: float
+    weights_smooth_step: float
+    def __init__(self) -> None: ...
+    def anim_matrix(self, influence: str, frame: int) -> List[float[16]]: ...
+    def bind_matrix(self, influence: str) -> List[float[16]]: ...
+    def compute(self, source: str, target: str, start_frame: int, end_frame: int) -> None: ...
+    def rmse(self) -> float: ...
+    @property
+    def end_frame(self) -> int: ...
+    @property
+    def influences(self) -> List[str]: ...
+    @property
+    def start_frame(self) -> int: ...
+    @property
+    def weights(self) -> List[float]: ...
