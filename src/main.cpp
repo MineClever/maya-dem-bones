@@ -9,6 +9,8 @@
 #include <DemBones/DemBonesExt.h>
 #include <DemBones/MatBlocks.h>
 #include <Python.h>
+
+#include "Py_MString.h"
 #include "utils.h"
 
 
@@ -376,9 +378,9 @@ public:
 		int cF = (int)anim.currentTime().value();
 
 		if (sF >= eF)
-			throw std::exception("Start frame is not allowed to be equal or larger than the end frame.");
+			Conversion::RaiseException("Start frame is not allowed to be equal or larger than the end frame.");
 		if (nV != sourceMeshFn.numVertices())
-			throw std::exception("Vertex count between source and target do not match.");
+			Conversion::RaiseException("Vertex count between source and target do not match.");
 
 		v.resize(3 * nF, nV);
 		fTime.resize(nF);
@@ -392,7 +394,7 @@ public:
 
 		// initialize model
 		if (nB == 0)
-			throw std::exception("No influences found.");
+			Conversion::RaiseException("No influences found.");
 		
 		// compute model
 		LOG("computing" << endl);
@@ -431,18 +433,62 @@ public:
 		anim.setCurrentTime(time);
 	}
 
+	void updateResultSkinWeight(string& skin_mesh)
+	{
+		MDagPath mayaSkinMeshDagpath = Conversion::toMDagPath(skin_mesh, true);
+		MObject obj = mayaSkinMeshDagpath.node();
+
+		MFnDependencyNode fnNode(obj);
+		MPlug historyPlug = fnNode.findPlug("inMesh", true, &status);
+		CHECK_MSTATUS_AND_THROW(status);
+		MItDependencyGraph itDG(obj,
+			MFn::kSkinClusterFilter,
+			MItDependencyGraph::kUpstream,
+			MItDependencyGraph::kDepthFirst,
+			MItDependencyGraph::kNodeLevel,
+			&status);
+
+		std::shared_ptr<MFnSkinCluster> fnMayaSkinMesh;
+		for (; !itDG.isDone(); itDG.next()) {
+			MObject skinObj = itDG.currentItem();
+			if (skinObj.hasFn(MFn::kSkinClusterFilter)) {
+				fnMayaSkinMesh =  std::make_shared<MFnSkinCluster>(skinObj, &status);
+				CHECK_MSTATUS_AND_THROW(status);
+				
+			}
+		}
+
+		MIntArray indices;
+		unsigned int boneCount = bonesMaya.size();
+		indices.setLength(boneCount);
+
+		#pragma omp parallel for
+		for (auto i = 0; i < boneCount; ++i) {
+			indices[i] = i;
+		}
+
+		status = fnMayaSkinMesh->setWeights(
+			mayaSkinMeshDagpath,
+			mayaSkinMeshDagpath.node(),
+			indices,
+			Conversion::toMDoubleArray(weightsMaya)
+		);
+		CHECK_MSTATUS_AND_THROW(status);
+
+	}
+
 	array<double, 16> bindMatrix(string& bone) {
 		if (bindMatricesMaya.find(bone) == bindMatricesMaya.end())
-			throw std::exception("Provided influence is not valid.");
+			Conversion::RaiseException("Provided influence is not valid.");
 
 		return Conversion::toMatrixArray(bindMatricesMaya[bone]);
 	}
 
 	array<double, 16> animMatrix(string& bone, int& frame) {
 		if (animMatricesMaya.find(bone) == animMatricesMaya.end())
-			throw std::exception("Provided bone is not valid.");
+			Conversion::RaiseException("Provided bone is not valid.");
 		if (animMatricesMaya[bone].find(frame) == animMatricesMaya[bone].end())
-			throw std::exception("Provided frame is not valid.");
+			Conversion::RaiseException("Provided frame is not valid.");
 
 		return Conversion::toMatrixArray(animMatricesMaya[bone][frame]);
 	}
@@ -489,5 +535,7 @@ PYBIND11_MODULE(_core, m) {
 		.def("rmse", &DemBonesModel::rmse, "Root mean squared reconstruction error")
 		.def("compute", &DemBonesModel::compute, "Skinning decomposition of alternative updating weights and bone transformations", py::arg("source"), py::arg("target"), py::arg("start_frame"), py::arg("end_frame"))
 		.def("bind_matrix", &DemBonesModel::bindMatrix, "Get the bind matrix for the provided influence", py::arg("influence"))
-		.def("anim_matrix", &DemBonesModel::animMatrix, "Get the animation matrix for the provided influence at the provided frame", py::arg("influence"), py::arg("frame"));
+		.def("anim_matrix", &DemBonesModel::animMatrix, "Get the animation matrix for the provided influence at the provided frame", py::arg("influence"), py::arg("frame"))
+		.def("update_result_skin_weight", & DemBonesModel::updateResultSkinWeight, py::arg("skin_mesh"))
+		;
 }

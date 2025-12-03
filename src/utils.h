@@ -26,7 +26,10 @@
 #include <maya/MItDependencyGraph.h>
 #include <Eigen/Dense>
 
+#include <Python.h>
+#include <pybind11/eval.h>
 
+namespace py = pybind11;
 using namespace std;
 using namespace Eigen;
 
@@ -37,11 +40,26 @@ using namespace Eigen;
 
 #define CHECK_MSTATUS_AND_THROW(status) {                       \
 	if (status.error())                                         \
-		throw std::exception(status.errorString().asChar());    \
+		py::exec((string("raise (") + status.errorString().asChar() + ")"));    \
 }
 
-
 namespace Conversion {
+
+	inline void RaiseException(const char* aMessage)
+	{
+		py::exec("raise RuntimeError (" + string(aMessage)+")");
+	}
+
+	inline void RaiseException(string& aMessage)
+	{
+		py::exec("raise RuntimeError (" + aMessage + ")");
+	}
+
+	inline void RaiseException(MString& aMessage)
+	{
+		py::exec("raise RuntimeError (" + string(aMessage.asChar()) + ")");
+	}
+
 	MDagPath toMDagPath(string& name, bool shape) {
 		MStatus status;
 		MDagPath dag;
@@ -95,5 +113,9 @@ namespace Conversion {
 
 	double toGrayScale(const MColor& c) {
 		return 0.2989*c.r + 0.5870*c.g + 0.1140*c.b;
+	}
+
+	MDoubleArray toMDoubleArray(const std::vector<double>& vec) {
+		return MDoubleArray(vec.data(), static_cast<unsigned int>(vec.size()));
 	}
 }
