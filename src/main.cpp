@@ -648,7 +648,7 @@ PYBIND11_MODULE(_core, m) {
         .def_readwrite("lock_bone_attr_name", &DemBonesModel::lockBoneAttrName, "Name of the attribute used to lock bone transformations, default = 'demLockBones'")
 		.def_readonly("start_frame", &DemBonesModel::sF, "Start frame of solver")
 		.def_readonly("end_frame", &DemBonesModel::eF, "End frame of solver")
-		.def_readonly("influences", &DemBonesModel::bonesMaya, "List of all influences")
+		.def_readonly("influences", &DemBonesModel::boneName, "List of all influences")
 		.def_readonly("weights", &DemBonesModel::weightsMaya, "List of weights for all influences and vertices")
 		.def("rmse", &DemBonesModel::rmse, "Root mean squared reconstruction error")
 		.def("compute", &DemBonesModel::compute, "Skinning decomposition of alternative updating weights and bone transformations", py::arg("source"), py::arg("target"), py::arg("start_frame"), py::arg("end_frame"))
