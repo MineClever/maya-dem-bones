@@ -25,8 +25,12 @@ public:
 	using Super = DemBonesExt<double, float>;
 	int sF = 1001;
 	int eF = 1010;
-	vector<string> bonesMaya;
-	vector<double> weightsMaya;
+
+	MDagPathArray bonesMaya;
+
+	std::vector<std::string> boneName;
+	std::vector<double> weightsMaya;
+
 	map<string, MMatrix> bindMatricesMaya;
 	map<string, map<int, MMatrix>> animMatricesMaya;
 	map<string, MTransformationMatrix::RotationOrder> rotOrderMaya;
@@ -34,8 +38,11 @@ public:
 	double tolerance;
 	int patience;
 	char * lockWeightsSet = "demLock";
+    char* lockBoneAttrName = "demLockBones";
 
 	DemBonesModel() : tolerance(1e-3), patience(3) { nIters = 30; clear(); }
+
+
 
 	void cbIterBegin() {
 		LOG("  iteration #" << iter << endl);
@@ -77,7 +84,7 @@ public:
 		MIntArray indices;
 		MDoubleArray weights;
 		MDagPath boneParentMaya;
-		MDagPathArray bonesMaya;
+		//MDagPathArray bonesMaya;
 		map<string, MatrixXd, less<string>, aligned_allocator<pair<const string, MatrixXd>>> mT;
 		map<string, VectorXd, less<string>, aligned_allocator<pair<const string, VectorXd>>> wT;
 		map<string, Matrix4d, less<string>, aligned_allocator<pair<const string, Matrix4d>>> bindMatrices;
@@ -255,7 +262,7 @@ public:
 			}
 
 			// get dem lock
-			MPlug demLockPlug = boneDagFn.findPlug("demLock", &status);
+			MPlug demLockPlug = boneDagFn.findPlug(MString(lockBoneAttrName), &status);
 			if (MS::kSuccess == status) lockM(j) = demLockPlug.asInt(); else lockM(j) = 0;
 		}
 
@@ -406,22 +413,24 @@ public:
 		computeRTB(0, lr, lt, gb, lbr, lbt, false);
 
 		for (int j = 0; j < nB; j++) {
-			string name = boneName[j];
-			bonesMaya.push_back(name);
-			MVector translate = MVector(lbt(0, j), lbt(1, j), lbt(2, j));
-			MVector rotate = MVector(lbr(0, j), lbr(1, j), lbr(2, j));
+			std::string name = boneName[j];  // boneName 已经保存了字符串名字
+			MVector translate(lbt(0, j), lbt(1, j), lbt(2, j));
+			MVector rotate(lbr(0, j), lbr(1, j), lbr(2, j));
 			bindMatricesMaya[name] = Conversion::toMMatrix(translate, rotate, rotOrderMaya[name]);
 
+			// 提取列向量
 			tVal = lt.col(j);
 			rVal = lr.col(j);
 
-			for (int k = sF; k < eF + 1; k++) {
+			// 遍历帧，生成动画矩阵
+			for (int k = sF; k <= eF; ++k) {
 				int num = k - sF;
-				MVector translate = MVector(tVal(num * 3), tVal((num * 3) + 1), tVal((num * 3) + 2));
-				MVector rotate = MVector(rVal(num * 3), rVal((num * 3) + 1), rVal((num * 3) + 2));
+				MVector translate(tVal(num * 3), tVal(num * 3 + 1), tVal(num * 3 + 2));
+				MVector rotate(rVal(num * 3), rVal(num * 3 + 1), rVal(num * 3 + 2));
 				animMatricesMaya[name][k] = Conversion::toMMatrix(translate, rotate, rotOrderMaya[name]);
 			}
 		}
+
 
 		weightsMaya.resize(nB * nV);
 		Eigen::SparseMatrix<double> wT = w.transpose();
@@ -459,7 +468,7 @@ public:
 		}
 
 		MIntArray indices;
-		unsigned int boneCount = bonesMaya.size();
+		unsigned int boneCount = bonesMaya.length();
 		indices.setLength(boneCount);
 
 		#pragma omp parallel for
@@ -499,6 +508,7 @@ public:
 		boneIndex.clear();
 	}
 
+	void applyAnimationAndWeights(std::string& skinMeshName);
 
 private:
 	double prevErr;
@@ -510,6 +520,113 @@ private:
 	MPointArray points;
 	map<string, int> boneIndex;
 } model;
+
+#include <maya/MFnSkinCluster.h>
+#include <maya/MFnAnimCurve.h>
+#include <maya/MPlug.h>
+#include <maya/MGlobal.h>
+#include <maya/MItDependencyGraph.h>
+#include <maya/MTransformationMatrix.h>
+#include <maya/MAnimControl.h>
+#include <maya/MTime.h>
+#include <maya/MIntArray.h>
+#include <maya/MDoubleArray.h>
+
+void DemBonesModel::applyAnimationAndWeights(std::string& skinMeshName)
+{
+
+	MDagPath skinMeshDag = Conversion::toMDagPath(skinMeshName, true);
+	MObject skinMeshObj = skinMeshDag.node();
+
+	MItDependencyGraph itDG(skinMeshObj,
+		MFn::kSkinClusterFilter,
+		MItDependencyGraph::kUpstream,
+		MItDependencyGraph::kDepthFirst,
+		MItDependencyGraph::kNodeLevel,
+		&status);
+	CHECK_MSTATUS_AND_THROW(status);
+
+	std::shared_ptr<MFnSkinCluster> fnSkinCluster;
+	for (; !itDG.isDone(); itDG.next()) {
+		MObject skinObj = itDG.currentItem();
+		if (skinObj.hasFn(MFn::kSkinClusterFilter)) {
+			fnSkinCluster = std::make_shared<MFnSkinCluster>(skinObj, &status);
+			CHECK_MSTATUS_AND_THROW(status);
+			break;
+		}
+	}
+
+	if (!fnSkinCluster) {
+		Conversion::RaiseException("No skinCluster found for mesh: " + skinMeshName);
+		return;
+	}
+
+	#pragma omp parallel for
+	for (int j = 0; j < nB; ++j) {
+		std::string name = boneName[j];
+		MObject boneObj = bonesMaya[j].node();
+		MFnDependencyNode boneNode(boneObj);
+
+		const char* attrs[] = { "translateX","translateY","translateZ",
+							   "rotateX","rotateY","rotateZ" };
+
+		for (int a = 0; a < 6; ++a) {
+			MPlug plug = boneNode.findPlug(attrs[a], true);
+			MObject animCurveObj;
+
+			MPlugArray connections;
+			plug.connectedTo(connections, true, false);
+			if (connections.length() > 0 && connections[0].node().hasFn(MFn::kAnimCurve)) {
+				animCurveObj = connections[0].node();
+			}
+			else {
+				MFnAnimCurve animFn;
+				animCurveObj = animFn.create(plug, MFnAnimCurve::kAnimCurveTL, nullptr, &status);
+			}
+
+			MFnAnimCurve animFn(animCurveObj);
+
+			for (int frame = sF; frame <= eF; ++frame) {
+				time.setValue(frame);
+				anim.setCurrentTime(time);
+
+				MMatrix mtx = animMatricesMaya[name][frame];
+				MTransformationMatrix tm(mtx);
+				MVector translate = tm.translation(MSpace::kWorld);
+				MEulerRotation euler = tm.rotation().asEulerRotation();
+
+				double value = 0.0;
+				if (a < 3) { // translate
+					value = (a == 0 ? translate.x : (a == 1 ? translate.y : translate.z));
+				}
+				else {       // rotate
+					double rad = (a == 3 ? euler.x : (a == 4 ? euler.y : euler.z));
+					value = MAngle(rad).asDegrees();
+				}
+
+				animFn.addKey(MTime(frame, MTime::kFilm), value);
+			}
+
+		}
+	}
+
+	MIntArray indices;
+	unsigned int boneCount = bonesMaya.length();
+	indices.setLength(boneCount);
+	for (unsigned int i = 0; i < boneCount; ++i) {
+		indices[i] = i;
+	}
+
+	status = fnSkinCluster->setWeights(
+		skinMeshDag,
+		skinMeshDag.node(),
+		indices,
+		Conversion::toMDoubleArray(weightsMaya)
+	);
+	CHECK_MSTATUS_AND_THROW(status);
+
+	MGlobal::displayInfo("Applied animation and updated weights for mesh: " + MString(skinMeshName.c_str()));
+}
 
 
 PYBIND11_MODULE(_core, m) {
@@ -528,12 +645,14 @@ PYBIND11_MODULE(_core, m) {
 		.def_readwrite("tolerance", &DemBonesModel::tolerance, "Convergence tolerance, default = 1e-3")
 		.def_readwrite("patience", &DemBonesModel::patience, "Number of iterations to wait before declaring convergence, default = 3")
 		.def_readwrite("lock_weights_set", &DemBonesModel::lockWeightsSet, "Name of the color set used to lock weights, default = 'demLock'")
+        .def_readwrite("lock_bone_attr_name", &DemBonesModel::lockBoneAttrName, "Name of the attribute used to lock bone transformations, default = 'demLockBones'")
 		.def_readonly("start_frame", &DemBonesModel::sF, "Start frame of solver")
 		.def_readonly("end_frame", &DemBonesModel::eF, "End frame of solver")
 		.def_readonly("influences", &DemBonesModel::bonesMaya, "List of all influences")
 		.def_readonly("weights", &DemBonesModel::weightsMaya, "List of weights for all influences and vertices")
 		.def("rmse", &DemBonesModel::rmse, "Root mean squared reconstruction error")
 		.def("compute", &DemBonesModel::compute, "Skinning decomposition of alternative updating weights and bone transformations", py::arg("source"), py::arg("target"), py::arg("start_frame"), py::arg("end_frame"))
+        .def("apply_animation_and_weights", &DemBonesModel::applyAnimationAndWeights, "Apply computed animation and weights to the provided skin mesh", py::arg("skin_mesh"))
 		.def("bind_matrix", &DemBonesModel::bindMatrix, "Get the bind matrix for the provided influence", py::arg("influence"))
 		.def("anim_matrix", &DemBonesModel::animMatrix, "Get the animation matrix for the provided influence at the provided frame", py::arg("influence"), py::arg("frame"))
 		.def("update_result_skin_weight", & DemBonesModel::updateResultSkinWeight, py::arg("skin_mesh"))
