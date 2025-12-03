@@ -40,7 +40,7 @@ using namespace Eigen;
 
 #define CHECK_MSTATUS_AND_THROW(status) {                       \
 	if (status.error())                                         \
-		py::exec((string("raise (") + status.errorString().asChar() + ")"));    \
+		py::exec((string("raise RuntimeError ('") + status.errorString().asChar() + "')"));    \
 }
 
 namespace Conversion {
