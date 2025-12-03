@@ -31,10 +31,12 @@ def validate_selection():
 
     # First selected: skinned mesh
     sk_mesh_dag = sel.getDagPath(0) # type: OpenMaya.MDagPath
+    sk_mesh_name = sk_mesh_dag.partialPathName()
     sk_mesh_dag.extendToShape()
 
     # Last selected: target animated mesh
     vtx_anim_mesh_dag = sel.getDagPath(sel.length() - 1) # type: OpenMaya.MDagPath
+    vtx_anim_mesh_name = vtx_anim_mesh_dag.partialPathName()
     vtx_anim_mesh_dag.extendToShape()
 
     # Vertex count check
@@ -47,7 +49,7 @@ def validate_selection():
         )
         return None, None
 
-    return sk_mesh_dag.partialPathName(), vtx_anim_mesh_dag.partialPathName()
+    return sk_mesh_name, vtx_anim_mesh_name
 
 
 def run_dem_bones(source_mesh: str, target_mesh: str, start_frame: int, end_frame: int,
@@ -59,12 +61,9 @@ def run_dem_bones(source_mesh: str, target_mesh: str, start_frame: int, end_fram
     db.compute(source_mesh, target_mesh, start_frame=start_frame, end_frame=end_frame)
 
     # Apply animation curves and weights directly via C++ for performance
-    if apply_anim or update_weights:
-        db.apply_animation_and_weights(source_mesh)
-
-    # If only weights were requested, and you prefer to use the pure-weight path:
-    # if update_weights and not apply_anim:
-    #     db.update_result_skin_weight(source_mesh)
+    OpenMaya.MGlobal.displayInfo("trying to apply animation and weights...")
+    if apply_anim:
+        db.apply_animation_and_weights(source_mesh,update_weights)
 
     # Feedback
     OpenMaya.MGlobal.displayInfo(

@@ -38,43 +38,69 @@ using namespace Eigen;
 	cout << str;                                                \
 }
 
-#define CHECK_MSTATUS_AND_THROW(status) {                       \
-	if (status.error())                                         \
-		py::exec((string("raise RuntimeError ('") + status.errorString().asChar() + "')"));    \
+
+static void CheckMStateAndThrow(MStatus& status)
+{
+	if (status.statusCode() == MStatus::kSuccess)
+		return;
+
+	if (status.error())
+	{
+		if (status.errorString().length() >= 1) // avoid nothing happen
+		{
+			LOG("[INFO] " << status.errorString().asUTF8() << endl);
+			py::exec("raise RuntimeError ('" + string(status.errorString().asUTF8()) + "')");
+		}
+		else
+		{
+			MGlobal::displayInfo(status.errorString());
+		}
+	}
 }
+
+#define CHECK_MSTATUS_AND_THROW(aStatus) CheckMStateAndThrow(aStatus)
 
 namespace Conversion {
 
 	inline void RaiseException(const char* aMessage)
 	{
-		py::exec("raise RuntimeError (" + string(aMessage)+")");
+		MGlobal::displayError(aMessage);
+		py::exec("raise RuntimeError ('" + string(aMessage)+"')");
 	}
+	
 
 	inline void RaiseException(string& aMessage)
 	{
-		py::exec("raise RuntimeError (" + aMessage + ")");
+		MGlobal::displayError(aMessage.c_str());
+		py::exec("raise RuntimeError ('" + aMessage + "')");
 	}
 
 	inline void RaiseException(MString& aMessage)
 	{
-		py::exec("raise RuntimeError (" + string(aMessage.asChar()) + ")");
+		MGlobal::displayError(aMessage.asUTF8());
+		py::exec("raise RuntimeError ('" + string(aMessage.asUTF8()) + "')");
 	}
 
 	MDagPath toMDagPath(string& name, bool shape) {
 		MStatus status;
 		MDagPath dag;
 		MSelectionList selection;
-
+		
 		status = selection.add(MString(name.c_str()));
-		CHECK_MSTATUS_AND_THROW(status);
+		LOG("[INFO] Get dagpath from string : "<< name.c_str() << endl);
+
 		status = selection.getDagPath(0, dag, MObject::kNullObj);
 		CHECK_MSTATUS_AND_THROW(status);
 
 		if (shape) {
 			status = dag.extendToShape();
-			CHECK_MSTATUS_AND_THROW(status);
-		}
 
+			if (status.statusCode() != MStatus::kSuccess)
+				status = dag.extendToShapeDirectlyBelow(0);
+		}
+		
+		CHECK_MSTATUS_AND_THROW(status);
+		LOG("[INFO] Get dagpath -> " << dag.fullPathName().asUTF8() << endl);
 		return dag;
 	};
 

@@ -10,6 +10,17 @@
 #include <DemBones/MatBlocks.h>
 #include <Python.h>
 
+#include <maya/MFnSkinCluster.h>
+#include <maya/MFnAnimCurve.h>
+#include <maya/MPlug.h>
+#include <maya/MGlobal.h>
+#include <maya/MItDependencyGraph.h>
+#include <maya/MTransformationMatrix.h>
+#include <maya/MAnimControl.h>
+#include <maya/MTime.h>
+#include <maya/MIntArray.h>
+#include <maya/MDoubleArray.h>
+
 #include "Py_MString.h"
 #include "utils.h"
 
@@ -310,7 +321,7 @@ public:
 		if (!hasKeyFrame) m.resize(0, 0);
 
 		// report
-		LOG("extracted source" << endl);
+		LOG("[INFO] Extracted source" << endl);
 		LOG("  " << nV << " vertices" << endl);
 		if (nB != 0) LOG("  " << nB << " joints" << endl);
 		if (hasKeyFrame) LOG("  keyframes found" << endl);
@@ -341,11 +352,12 @@ public:
 			for (int k = fStart(s); k < fStart(s + 1); k++)
 				subjectID(k) = s;
 
-		LOG("extracted target" << endl);
+		LOG("[INFO] Extracted target" << endl);
 	}
 
 	void compute(string& source, string& target, int& startFrame, int& endFrame) {
 		// log parameters
+		LOG("\n[INFO] Start Compute" << endl);
 		LOG("parameters" << endl);
 		LOG("  source                   = " << source << endl);
 		LOG("  target                   = " << target << endl);
@@ -368,11 +380,14 @@ public:
 		np = patience;
 
 		// get geometry
+		LOG("Convert source dagpath from " << source << endl);
 		MDagPath sourcePath = Conversion::toMDagPath(source, true);
+		LOG("Convert target dagpath from " << target << endl);
 		MDagPath targetPath = Conversion::toMDagPath(target, true);
 
 		MFnMesh sourceMeshFn(sourcePath, &status);
 		CHECK_MSTATUS_AND_THROW(status);
+
 		MFnMesh targetMeshFn(targetPath, &status);
 		CHECK_MSTATUS_AND_THROW(status);
 
@@ -383,6 +398,7 @@ public:
 		nF = endFrame - startFrame + 1;
 		nV = sourceMeshFn.numVertices();
 		int cF = (int)anim.currentTime().value();
+		
 
 		if (sF >= eF)
 			Conversion::RaiseException("Start frame is not allowed to be equal or larger than the end frame.");
@@ -396,7 +412,9 @@ public:
 		fStart(1) = nF;
 
 		// update model: source + target
+		LOG("[INFO] Extract Target" << endl);
 		extractTarget(targetMeshFn);
+		LOG("[INFO] Extract Source" << endl);
 		extractSource(sourcePath, sourceMeshFn);
 
 		// initialize model
@@ -521,16 +539,6 @@ private:
 	map<string, int> boneIndex;
 } model;
 
-#include <maya/MFnSkinCluster.h>
-#include <maya/MFnAnimCurve.h>
-#include <maya/MPlug.h>
-#include <maya/MGlobal.h>
-#include <maya/MItDependencyGraph.h>
-#include <maya/MTransformationMatrix.h>
-#include <maya/MAnimControl.h>
-#include <maya/MTime.h>
-#include <maya/MIntArray.h>
-#include <maya/MDoubleArray.h>
 
 void DemBonesModel::applyAnimationAndWeights(std::string& skinMeshName, bool bUpdateJointWeight)
 {
@@ -552,6 +560,7 @@ void DemBonesModel::applyAnimationAndWeights(std::string& skinMeshName, bool bUp
 		if (skinObj.hasFn(MFn::kSkinClusterFilter)) {
 			fnSkinCluster = std::make_shared<MFnSkinCluster>(skinObj, &status);
 			CHECK_MSTATUS_AND_THROW(status);
+			LOG("[INFO] Found valid skin cluster." << endl;);
 			break;
 		}
 	}
@@ -561,7 +570,7 @@ void DemBonesModel::applyAnimationAndWeights(std::string& skinMeshName, bool bUp
 		return;
 	}
 
-	#pragma omp parallel for
+
 	for (int j = 0; j < nB; ++j) {
 		std::string name = boneName[j];
 		MObject boneObj = bonesMaya[j].node();
@@ -611,19 +620,24 @@ void DemBonesModel::applyAnimationAndWeights(std::string& skinMeshName, bool bUp
 	}
 
 	MIntArray indices;
-	unsigned int boneCount = bonesMaya.length();
+	int boneCount = bonesMaya.length();
 	indices.setLength(boneCount);
-	for (unsigned int i = 0; i < boneCount; ++i) {
+
+	#pragma omp parallel for
+	for (int i = 0; i < boneCount; ++i) {
 		indices[i] = i;
 	}
 
-	status = fnSkinCluster->setWeights(
-		skinMeshDag,
-		skinMeshDag.node(),
-		indices,
-		Conversion::toMDoubleArray(weightsMaya)
-	);
-	CHECK_MSTATUS_AND_THROW(status);
+	if (bUpdateJointWeight)
+	{
+		status = fnSkinCluster->setWeights(
+			skinMeshDag,
+			MObject::kNullObj,
+			indices,
+			Conversion::toMDoubleArray(weightsMaya)
+		);
+		CHECK_MSTATUS_AND_THROW(status);
+	}
 
 	MGlobal::displayInfo("Applied animation / updated weights for mesh: " + MString(skinMeshName.c_str()));
 }
