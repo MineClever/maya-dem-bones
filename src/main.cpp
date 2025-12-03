@@ -508,7 +508,7 @@ public:
 		boneIndex.clear();
 	}
 
-	void applyAnimationAndWeights(std::string& skinMeshName);
+	void applyAnimationAndWeights(std::string& skinMeshName, bool bUpdateJointWeight = false);
 
 private:
 	double prevErr;
@@ -532,7 +532,7 @@ private:
 #include <maya/MIntArray.h>
 #include <maya/MDoubleArray.h>
 
-void DemBonesModel::applyAnimationAndWeights(std::string& skinMeshName)
+void DemBonesModel::applyAnimationAndWeights(std::string& skinMeshName, bool bUpdateJointWeight)
 {
 
 	MDagPath skinMeshDag = Conversion::toMDagPath(skinMeshName, true);
@@ -625,7 +625,7 @@ void DemBonesModel::applyAnimationAndWeights(std::string& skinMeshName)
 	);
 	CHECK_MSTATUS_AND_THROW(status);
 
-	MGlobal::displayInfo("Applied animation and updated weights for mesh: " + MString(skinMeshName.c_str()));
+	MGlobal::displayInfo("Applied animation / updated weights for mesh: " + MString(skinMeshName.c_str()));
 }
 
 
@@ -652,7 +652,7 @@ PYBIND11_MODULE(_core, m) {
 		.def_readonly("weights", &DemBonesModel::weightsMaya, "List of weights for all influences and vertices")
 		.def("rmse", &DemBonesModel::rmse, "Root mean squared reconstruction error")
 		.def("compute", &DemBonesModel::compute, "Skinning decomposition of alternative updating weights and bone transformations", py::arg("source"), py::arg("target"), py::arg("start_frame"), py::arg("end_frame"))
-        .def("apply_animation_and_weights", &DemBonesModel::applyAnimationAndWeights, "Apply computed animation and weights to the provided skin mesh", py::arg("skin_mesh"))
+        .def("apply_animation_and_weights", &DemBonesModel::applyAnimationAndWeights, py::arg("skin_mesh"),py::arg("b_update_joint_weight"), "Apply computed animation and weights to the provided skin mesh")
 		.def("bind_matrix", &DemBonesModel::bindMatrix, "Get the bind matrix for the provided influence", py::arg("influence"))
 		.def("anim_matrix", &DemBonesModel::animMatrix, "Get the animation matrix for the provided influence at the provided frame", py::arg("influence"), py::arg("frame"))
 		.def("update_result_skin_weight", & DemBonesModel::updateResultSkinWeight, py::arg("skin_mesh"))
