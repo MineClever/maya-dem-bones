@@ -558,11 +558,19 @@ public:
 		double radius)
 	{
 		std::vector<MObject> joints(names.size());
+		MDagModifier jointCreatModifier;
 
 		for (size_t j = 0; j < names.size(); ++j)
 		{
-			MFnIkJoint fnJoint;
-			MObject jointObj = fnJoint.create(MObject::kNullObj, &status);
+			LOG("[INFO] Create new bone <" << names[j] << ">" << endl);
+			MObject jointObj = jointCreatModifier.createNode("joint", MObject::kNullObj, &status);
+			CHECK_MSTATUS_AND_THROW(status);
+			MFnIkJoint fnJoint(jointObj, &status);
+			CHECK_MSTATUS_AND_THROW(status);
+
+			// Set position of the root joint (e.g., at the origin)
+			MVector rootPos(0.0, 0.0, 0.0);
+			status = fnJoint.setTranslation(rootPos, MSpace::kWorld);
 			CHECK_MSTATUS_AND_THROW(status);
 
 			fnJoint.setName(MString(names[j].c_str()));
