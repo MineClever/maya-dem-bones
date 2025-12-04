@@ -58,12 +58,16 @@ def run_dem_bones(source_mesh: str, target_mesh: str, start_frame: int, end_fram
     Run DemBones compute and optionally apply animation keys and weights via C++ API.
     """
     db = dem_bones.DemBones()
+    db.lock_bone_attr_name = "demLock"
     db.compute(source_mesh, target_mesh, start_frame=start_frame, end_frame=end_frame)
 
     # Apply animation curves and weights directly via C++ for performance
     OpenMaya.MGlobal.displayInfo("trying to apply animation and weights...")
     if apply_anim:
         db.apply_animation_and_weights(source_mesh,update_weights)
+    else:
+        if update_weights:
+            db.update_result_skin_weight(source_mesh)
 
     # Feedback
     OpenMaya.MGlobal.displayInfo(
