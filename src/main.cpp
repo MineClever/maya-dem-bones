@@ -430,17 +430,17 @@ public:
 		MatrixXd lr, lt, gb, lbr, lbt;
 		computeRTB(0, lr, lt, gb, lbr, lbt, false);
 
+		#pragma omp parallel for
 		for (int j = 0; j < nB; j++) {
-			std::string name = boneName[j];  // boneName 已经保存了字符串名字
+			const std::string name = boneName[j];  // boneName
 			MVector translate(lbt(0, j), lbt(1, j), lbt(2, j));
 			MVector rotate(lbr(0, j), lbr(1, j), lbr(2, j));
 			bindMatricesMaya[name] = Conversion::toMMatrix(translate, rotate, rotOrderMaya[name]);
 
-			// 提取列向量
+
 			tVal = lt.col(j);
 			rVal = lr.col(j);
 
-			// 遍历帧，生成动画矩阵
 			for (int k = sF; k <= eF; ++k) {
 				int num = k - sF;
 				MVector translate(tVal(num * 3), tVal(num * 3 + 1), tVal(num * 3 + 2));
@@ -489,7 +489,6 @@ public:
 		unsigned int boneCount = bonesMaya.length();
 		indices.setLength(boneCount);
 
-		#pragma omp parallel for
 		for (auto i = 0; i < boneCount; ++i) {
 			indices[i] = i;
 		}
@@ -570,17 +569,19 @@ void DemBonesModel::applyAnimationAndWeights(std::string& skinMeshName, bool bUp
 		return;
 	}
 
+	const char* transformAttrs[] = { "translateX","translateY","translateZ",
+						   "rotateX","rotateY","rotateZ" };
+
+	constexpr int attrsCount = sizeof(transformAttrs) / sizeof(transformAttrs[0]);
+	const MTime::Unit currentUnit = MTime::uiUnit();
 
 	for (int j = 0; j < nB; ++j) {
 		std::string name = boneName[j];
 		MObject boneObj = bonesMaya[j].node();
 		MFnDependencyNode boneNode(boneObj);
 
-		const char* attrs[] = { "translateX","translateY","translateZ",
-							   "rotateX","rotateY","rotateZ" };
-
-		for (int a = 0; a < 6; ++a) {
-			MPlug plug = boneNode.findPlug(attrs[a], true);
+		for (int attrIndex = 0; attrIndex < attrsCount; ++attrIndex) {
+			MPlug plug = boneNode.findPlug(transformAttrs[attrIndex], true);
 			MObject animCurveObj;
 
 			MPlugArray connections;
@@ -591,6 +592,7 @@ void DemBonesModel::applyAnimationAndWeights(std::string& skinMeshName, bool bUp
 			else {
 				MFnAnimCurve animFn;
 				animCurveObj = animFn.create(plug, MFnAnimCurve::kAnimCurveTL, nullptr, &status);
+				CHECK_MSTATUS_AND_THROW(status);
 			}
 
 			MFnAnimCurve animFn(animCurveObj);
@@ -605,15 +607,15 @@ void DemBonesModel::applyAnimationAndWeights(std::string& skinMeshName, bool bUp
 				MEulerRotation euler = tm.rotation().asEulerRotation();
 
 				double value = 0.0;
-				if (a < 3) { // translate
-					value = (a == 0 ? translate.x : (a == 1 ? translate.y : translate.z));
+				if (attrIndex < 3) { // translate
+					value = (attrIndex == 0 ? translate.x : (attrIndex == 1 ? translate.y : translate.z));
 				}
 				else {       // rotate
-					double rad = (a == 3 ? euler.x : (a == 4 ? euler.y : euler.z));
+					double rad = (attrIndex == 3 ? euler.x : (attrIndex == 4 ? euler.y : euler.z));
 					value = MAngle(rad).asDegrees();
 				}
 
-				animFn.addKey(MTime(frame, MTime::kFilm), value);
+				animFn.addKey(MTime(frame, currentUnit), value);
 			}
 
 		}
