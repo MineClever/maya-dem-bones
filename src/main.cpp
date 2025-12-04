@@ -558,12 +558,12 @@ public:
 		double radius)
 	{
 		std::vector<MObject> joints(names.size());
-		MDagModifier jointCreatModifier;
+		MDagModifier dagMod;
 
 		for (size_t j = 0; j < names.size(); ++j)
 		{
 			LOG("[INFO] Create new bone <" << names[j] << ">" << endl);
-			MObject jointObj = jointCreatModifier.createNode("joint", MObject::kNullObj, &status);
+			MObject jointObj = dagMod.createNode("joint", MObject::kNullObj, &status);
 			CHECK_MSTATUS_AND_THROW(status);
 			MFnIkJoint fnJoint(jointObj, &status);
 			CHECK_MSTATUS_AND_THROW(status);
@@ -583,8 +583,9 @@ public:
 
 			joints[j] = jointObj;
 		}
+		status = dagMod.doIt();
+		CHECK_MSTATUS_AND_THROW(status);
 
-		MDagModifier dagMod;
 		for (size_t j = 0; j < names.size(); ++j)
 		{
 			int p = parent[j];
