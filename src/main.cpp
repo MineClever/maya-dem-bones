@@ -359,7 +359,7 @@ public:
 	void compute(string& source, string& target, int& startFrame, int& endFrame) {
 		// log parameters
 		LOG("\n[INFO] Start Compute" << endl);
-		LOG("parameters" << endl);
+		LOG("parameters: " << endl);
 		LOG("  source                   = " << source << endl);
 		LOG("  target                   = " << target << endl);
 		LOG("  start_frame              = " << startFrame << endl);
@@ -375,6 +375,10 @@ public:
 		LOG("  weights_smooth           = " << weightsSmooth << endl);
 		LOG("  weights_smooth_step      = " << weightsSmoothStep << endl);
 		LOG("  weights_epsilon          = " << weightEps << endl);
+		LOG("  bindUpdate               = " << bindUpdate << endl);
+		LOG("  lockWeightsSet			= " << lockWeightsSet << endl);
+		LOG("  lockBoneAttrName			= " << lockBoneAttrName << endl)
+		LOG("\n" << endl)
 		
 		// variables
 		prevErr = -1;
