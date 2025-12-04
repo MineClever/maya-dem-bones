@@ -481,7 +481,7 @@ public:
 			if (skinObj.hasFn(MFn::kSkinClusterFilter)) {
 				fnMayaSkinMesh =  std::make_shared<MFnSkinCluster>(skinObj, &status);
 				CHECK_MSTATUS_AND_THROW(status);
-				
+				break;
 			}
 		}
 
