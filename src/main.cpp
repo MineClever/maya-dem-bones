@@ -565,26 +565,23 @@ public:
 			LOG("[INFO] Create new bone <" << names[j] << ">" << endl);
 			MObject jointObj = dagMod.createNode("joint", MObject::kNullObj, &status);
 			CHECK_MSTATUS_AND_THROW(status);
-			MFnIkJoint fnJoint(jointObj, &status);
-			CHECK_MSTATUS_AND_THROW(status);
-
-			// Set position of the root joint (e.g., at the origin)
-			MVector rootPos(0.0, 0.0, 0.0);
-			status = fnJoint.setTranslation(rootPos, MSpace::kWorld);
-			CHECK_MSTATUS_AND_THROW(status);
-
-			fnJoint.setName(MString(names[j].c_str()));
-			MPlug radiusPlug = fnJoint.findPlug("radius", true, &status);
-			if (status.statusCode() == MStatus::kSuccess) {
-				radiusPlug.setDouble(radius);
-			};
-
-			fnJoint.setRotationOrder(MTransformationMatrix::kXYZ, true);
 
 			joints[j] = jointObj;
 		}
 		status = dagMod.doIt();
 		CHECK_MSTATUS_AND_THROW(status);
+
+		for (size_t j = 0; j < names.size(); ++j)
+		{
+			MObject jointObj = joints[j];
+
+			MFnIkJoint fnJoint(jointObj, &status);
+			if (status.statusCode() != status.kSuccess)
+			{
+				continue;
+			}
+			fnJoint.setName(MString(names[j].c_str()));
+		}
 
 		for (size_t j = 0; j < names.size(); ++j)
 		{

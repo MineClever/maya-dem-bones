@@ -1,9 +1,8 @@
 # -*- coding: utf-8 -*-
-import sys
-from typing import Optional
 
-from maya import cmds
-from maya.api import OpenMaya
+from typing import Optional
+from maya import OpenMaya
+om = OpenMaya
 
 # Import the pybind11 module (exposed as dem_bones.DemBones)
 import dem_bones
@@ -24,18 +23,21 @@ def validate_selection():
     Validate Maya selection for source skinned mesh and target animated mesh.
     Returns (source_mesh_name, target_mesh_name) or (None, None) if invalid.
     """
-    sel = OpenMaya.MGlobal.getActiveSelectionList() # type: OpenMaya.MSelectionList
+    sel = OpenMaya.MSelectionList()
+    OpenMaya.MGlobal.getActiveSelectionList(sel)
     if sel.length() < 2:
         OpenMaya.MGlobal.displayWarning("Select a skinned mesh first, then the target animated mesh.")
         return None, None
 
     # First selected: skinned mesh
-    sk_mesh_dag = sel.getDagPath(0) # type: OpenMaya.MDagPath
+    sk_mesh_dag = OpenMaya.MDagPath()
+    sel.getDagPath(0, sk_mesh_dag)
     sk_mesh_name = sk_mesh_dag.partialPathName()
     sk_mesh_dag.extendToShape()
 
     # Last selected: target animated mesh
-    vtx_anim_mesh_dag = sel.getDagPath(sel.length() - 1) # type: OpenMaya.MDagPath
+    vtx_anim_mesh_dag = OpenMaya.MDagPath()
+    sel.getDagPath(sel.length() - 1)
     vtx_anim_mesh_name = vtx_anim_mesh_dag.partialPathName()
     vtx_anim_mesh_dag.extendToShape()
 
@@ -59,6 +61,7 @@ def run_dem_bones(source_mesh: str, target_mesh: str, start_frame: int, end_fram
     """
     db = dem_bones.DemBones()
     db.lock_bone_attr_name = "demLock"
+    db.nBones = 100
     db.compute(source_mesh, target_mesh, start_frame=start_frame, end_frame=end_frame)
 
     # Apply animation curves and weights directly via C++ for performance
