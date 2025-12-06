@@ -1,0 +1,306 @@
+from __future__ import annotations
+
+import math
+from maya import cmds
+from maya import OpenMaya, OpenMayaAnim, OpenMayaUI as omui
+from maya.api import OpenMaya as om2
+from maya.api import OpenMayaAnim as oma2
+
+from shiboken2 import wrapInstance
+from PySide2 import QtWidgets, QtCore
+import dem_bones
+
+def get_maya_main_window():
+    ptr = omui.MQtUtil.mainWindow()
+    return wrapInstance(int(ptr), QtWidgets.QWidget)
+
+
+class DemBonesUI(QtWidgets.QDialog):
+    def __init__(self, parent=None):
+        if parent is None:
+            parent = get_maya_main_window()
+        super(DemBonesUI, self).__init__(parent)
+        self.setWindowTitle("DemBones UI")
+        self.setMinimumWidth(420)
+        # unique object name so we can find any existing instance
+        self.setObjectName("DemBonesUI_MainWindow")
+        self._build_ui()
+
+    def _build_ui(self):
+        layout = QtWidgets.QVBoxLayout(self)
+
+        # Source / Target Row
+        row = QtWidgets.QHBoxLayout()
+        self.source_le = QtWidgets.QLineEdit()
+        self.source_btn = QtWidgets.QPushButton("Select Source")
+        self.source_btn.clicked.connect(self.select_source)
+        row.addWidget(QtWidgets.QLabel("VertexAnimMesh:"))
+        row.addWidget(self.source_le)
+        row.addWidget(self.source_btn)
+        layout.addLayout(row)
+
+        row2 = QtWidgets.QHBoxLayout()
+        self.target_le = QtWidgets.QLineEdit()
+        self.target_btn = QtWidgets.QPushButton("Select Target")
+        self.target_btn.clicked.connect(self.select_target)
+        row2.addWidget(QtWidgets.QLabel("SkinnedMesh:"))
+        row2.addWidget(self.target_le)
+        row2.addWidget(self.target_btn)
+        layout.addLayout(row2)
+
+        # Detected SkinCluster
+        sc_row = QtWidgets.QHBoxLayout()
+        self.skincluster_le = QtWidgets.QLineEdit()
+        self.skincluster_le.setReadOnly(False)
+        self.detect_sc_btn = QtWidgets.QPushButton("Detect from Source")
+        self.detect_sc_btn.clicked.connect(self.detect_skincluster)
+        sc_row.addWidget(QtWidgets.QLabel("SkinCluster:"))
+        sc_row.addWidget(self.skincluster_le)
+        sc_row.addWidget(self.detect_sc_btn)
+        layout.addLayout(sc_row)
+
+        # Parameters
+        params_group = QtWidgets.QGroupBox("DemBones Parameters")
+        params_layout = QtWidgets.QGridLayout()
+
+        self.num_iter_sb = QtWidgets.QSpinBox()
+        self.num_iter_sb.setRange(1, 1000)
+        self.num_iter_sb.setValue(30)
+
+        self.num_transform_sb = QtWidgets.QSpinBox()
+        self.num_transform_sb.setRange(0, 1000)
+        self.num_transform_sb.setValue(10)
+
+        self.num_weight_sb = QtWidgets.QSpinBox()
+        self.num_weight_sb.setRange(0, 1000)
+        self.num_weight_sb.setValue(10)
+
+        self.bind_cb = QtWidgets.QCheckBox()
+        self.bind_cb.setChecked(False)
+
+        self.start_frame_sb = QtWidgets.QSpinBox()
+        self.start_frame_sb.setRange(-100000, 100000)
+        self.start_frame_sb.setValue(1001)
+        self.end_frame_sb = QtWidgets.QSpinBox()
+        self.end_frame_sb.setRange(-100000, 100000)
+        self.end_frame_sb.setValue(1052)
+
+        # button to set from timeline
+        self.timeline_btn = QtWidgets.QPushButton("Use Timeline Range")
+        self.timeline_btn.clicked.connect(self.use_timeline_range)
+
+        params_layout.addWidget(QtWidgets.QLabel("num_iterations:"), 0, 0)
+        params_layout.addWidget(self.num_iter_sb, 0, 1)
+        params_layout.addWidget(QtWidgets.QLabel("num_transform_iterations:"), 1, 0)
+        params_layout.addWidget(self.num_transform_sb, 1, 1)
+        params_layout.addWidget(QtWidgets.QLabel("num_weight_iterations:"), 2, 0)
+        params_layout.addWidget(self.num_weight_sb, 2, 1)
+        params_layout.addWidget(QtWidgets.QLabel("bind_update:"), 3, 0)
+        params_layout.addWidget(self.bind_cb, 3, 1)
+        params_layout.addWidget(QtWidgets.QLabel("start_frame:"), 4, 0)
+        params_layout.addWidget(self.start_frame_sb, 4, 1)
+        params_layout.addWidget(QtWidgets.QLabel("end_frame:"), 5, 0)
+        params_layout.addWidget(self.end_frame_sb, 5, 1)
+        params_layout.addWidget(self.timeline_btn, 5, 2)
+
+        params_group.setLayout(params_layout)
+        layout.addWidget(params_group)
+
+        # Options and Run
+        self.apply_weights_cb = QtWidgets.QCheckBox("Apply weights to SkinCluster after compute")
+        self.apply_weights_cb.setChecked(True)
+        # Option to create animation keys for influences
+        self.create_keys_cb = QtWidgets.QCheckBox("Create animation keys for influences")
+        self.create_keys_cb.setChecked(True)
+        layout.addWidget(self.apply_weights_cb)
+        layout.addWidget(self.create_keys_cb)
+
+        btn_row = QtWidgets.QHBoxLayout()
+        btn_row.addStretch()
+        self.run_btn = QtWidgets.QPushButton("Run")
+        self.run_btn.clicked.connect(self.run)
+        self.close_btn = QtWidgets.QPushButton("Close")
+        # close the dialog (destroy) instead of hide
+        self.close_btn.clicked.connect(self.close)
+        btn_row.addWidget(self.run_btn)
+        btn_row.addWidget(self.close_btn)
+        layout.addLayout(btn_row)
+
+        self.setLayout(layout)
+
+    def select_source(self):
+        sel = cmds.ls(selection=True)
+        if not sel:
+            cmds.warning("Please select a source object first.")
+            return
+        src = sel[0]
+        self.source_le.setText(src)
+
+
+    def select_target(self):
+        sel = cmds.ls(selection=True)
+        if not sel:
+            cmds.warning("Please select a target object first.")
+            return
+        tgt = sel[0]
+        self.target_le.setText(tgt)
+        # auto detect skinCluster
+        self._auto_detect_skincluster_from(tgt)
+
+    def detect_skincluster(self):
+        tat = self.target_le.text().strip()
+        if not tat:
+            cmds.warning("Target is empty. Select a source or click Select Target first.")
+            return
+        self._auto_detect_skincluster_from(tat)
+
+    def _auto_detect_skincluster_from(self, mesh_name: str):
+        # If transform provided, try shape
+        shapes = cmds.listRelatives(mesh_name, shapes=True, fullPath=True) or []
+        candidates = []
+        if shapes:
+            for s in shapes:
+                hist = cmds.listHistory(s) or []
+                sc = [n for n in hist if cmds.nodeType(n) == 'skinCluster']
+                if sc:
+                    candidates.extend(sc)
+        # also try history on transform
+        hist2 = cmds.listHistory(mesh_name) or []
+        sc2 = [n for n in hist2 if cmds.nodeType(n) == 'skinCluster']
+        candidates.extend(sc2)
+
+        candidates = list(dict.fromkeys(candidates))
+        if candidates:
+            self.skincluster_le.setText(candidates[0])
+            cmds.inViewMessage(amg='Detected skinCluster: <hl>{}</hl>'.format(candidates[0]), pos='midCenter', fade=True, fadeInTime=0.1, fadeStayTime=1.0, fadeOutTime=0.2)
+        else:
+            cmds.inViewMessage(amg='No skinCluster found for <hl>{}</hl>'.format(mesh_name), pos='midCenter', fade=True, fadeInTime=0.1, fadeStayTime=1.0, fadeOutTime=0.2)
+
+    def _apply_weights_to_skincluster(self, db):
+        # type: (dem_bones.DemBones) -> None
+        tat_name = self.target_le.text().strip()
+        if not tat_name:
+            cmds.warning("No target specified to apply weights.")
+            return
+
+        db.update_result_skin_weight(tat_name)
+        
+
+    def closeEvent(self, event):
+        # Allow destruction: clear module-level reference so a new dialog can be created later
+        global _dlg
+        try:
+            _dlg = None
+        except NameError:
+            pass
+        # Ensure the dialog is destroyed by Maya/PySide: accept the close event and schedule deletion
+        try:
+            event.accept()
+        except Exception:
+            pass
+        try:
+            # schedule object for deletion on the Qt event loop
+            self.deleteLater()
+        except Exception:
+            # as a last resort, try to hide
+            try:
+                self.hide()
+            except Exception:
+                pass
+
+    def use_timeline_range(self):
+        try:
+            min_t = cmds.playbackOptions(q=True, minTime=True)
+            max_t = cmds.playbackOptions(q=True, maxTime=True)
+            # set spinboxes to integer frame values
+            self.start_frame_sb.setValue(int(round(min_t)))
+            self.end_frame_sb.setValue(int(round(max_t)))
+            cmds.inViewMessage(amg='Timeline range set: <hl>{}</hl> - <hl>{}</hl>'.format(int(min_t), int(max_t)), pos='midCenter', fade=True, fadeInTime=0.1, fadeStayTime=1.0, fadeOutTime=0.2)
+        except Exception as e:
+            cmds.warning('Failed to read timeline range: {}'.format(e))
+
+    def run(self):
+        src = self.source_le.text().strip()
+        tgt = self.target_le.text().strip()
+        if not src or not tgt:
+            QtWidgets.QMessageBox.warning(self, 'Missing', 'Please set both Source and Target.')
+            return
+
+
+        db = dem_bones.DemBones()
+        db.num_iterations = int(self.num_iter_sb.value())
+        db.num_transform_iterations = int(self.num_transform_sb.value())
+        db.num_weight_iterations = int(self.num_weight_sb.value())
+        db.bind_update = 1 if self.bind_cb.isChecked() else 0
+
+        start_frame = int(self.start_frame_sb.value())
+        end_frame = int(self.end_frame_sb.value())
+
+        try:
+            db.compute(tgt, src, start_frame=start_frame, end_frame=end_frame)
+            cmds.inViewMessage(amg='DemBones compute finished for <hl>{}</hl> -> <hl>{}</hl>'.format(src, tgt), pos='midCenter', fade=True, fadeInTime=0.1, fadeStayTime=1.0, fadeOutTime=0.2)
+        except Exception as e:
+            QtWidgets.QMessageBox.critical(self, 'Compute Error', str(e))
+            return
+
+        # Optionally create animation keys for influences
+        if self.create_keys_cb.isChecked():
+            # Use db's read-only start/end if available, otherwise use local values
+            s_frame = getattr(db, 'start_frame', start_frame)
+            e_frame = getattr(db, 'end_frame', end_frame)
+            try:
+                for frame in range(s_frame, e_frame + 1):
+                    for influence in db.influences:
+                        matrix = om2.MMatrix(db.anim_matrix(influence, frame))
+                        matrix = om2.MTransformationMatrix(matrix)
+                        translate = matrix.translation(om2.MSpace.kWorld)
+                        rotate = matrix.rotation().asVector()
+
+                        cmds.setKeyframe("{}.translateX".format(influence), time=frame, value=translate.x)
+                        cmds.setKeyframe("{}.translateY".format(influence), time=frame, value=translate.y)
+                        cmds.setKeyframe("{}.translateZ".format(influence), time=frame, value=translate.z)
+                        cmds.setKeyframe("{}.rotateX".format(influence), time=frame, value=math.degrees(rotate.x))
+                        cmds.setKeyframe("{}.rotateY".format(influence), time=frame, value=math.degrees(rotate.y))
+                        cmds.setKeyframe("{}.rotateZ".format(influence), time=frame, value=math.degrees(rotate.z))
+                cmds.inViewMessage(amg='Created animation keys for influences', pos='midCenter', fade=True, fadeInTime=0.1, fadeStayTime=1.0, fadeOutTime=0.2)
+            except Exception as e:
+                cmds.warning('Failed to create animation keys: {}'.format(e))
+
+        # Optionally apply weights
+        if self.apply_weights_cb.isChecked():
+            self._apply_weights_to_skincluster(db)
+
+        QtWidgets.QMessageBox.information(self, 'Done', 'DemBones run complete.')
+
+
+_dlg = None
+
+
+def show():
+    global _dlg
+    app = QtWidgets.QApplication.instance()
+    # look for any existing top-level widget with our objectName and reuse it
+    if app is not None:
+        for w in app.topLevelWidgets():
+            try:
+                if w.objectName() == 'DemBonesUI_MainWindow' and isinstance(w, DemBonesUI):
+                    _dlg = w
+                    _dlg.show()
+                    _dlg.raise_()
+                    _dlg.activateWindow()
+                    return
+            except Exception:
+                # some widgets may not have objectName; ignore
+                pass
+
+    # fallback: create or show the module-level dialog
+    if _dlg is None:
+        _dlg = DemBonesUI()
+    if not _dlg.isVisible():
+        _dlg.show()
+    _dlg.raise_()
+    _dlg.activateWindow()
+
+
+if __name__ == '__main__':
+    show()

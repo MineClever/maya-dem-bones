@@ -94,15 +94,6 @@ class DemBones:
         """
         ...
 
-    def apply_animation_and_weights(self, skin_mesh: str, b_update_joint_weight:bool = False) -> None:
-        """
-        将计算得到的动画和权重应用到指定的 skin mesh。
-
-        功能:
-            - 为骨骼插入关键帧 (translate/rotate)
-            - 更新 skinCluster 权重
-        """
-        ...
 
     def bind_matrix(self, influence: str) -> Tuple[float, ...]:
         """

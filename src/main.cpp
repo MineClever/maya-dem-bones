@@ -34,6 +34,7 @@ public:
 	double tolerance;
 	int patience;
 	char* lockWeightsSet = "demLock";
+    char* lockWeightsAttr = "demLock";
 
 	DemBonesModel() : tolerance(1e-3), patience(3) { nIters = 30; clear(); }
 
@@ -92,7 +93,7 @@ public:
 
 		u.resize(3, nV);
 
-#pragma omp parallel for
+		#pragma omp parallel for
 		for (int i = 0; i < nV; i++) {
 			MPoint point = points[i];
 			u.col(i) << point.x, point.y, point.z;
@@ -255,8 +256,10 @@ public:
 			}
 
 			// get dem lock
-			MPlug demLockPlug = boneDagFn.findPlug("demLock", &status);
-			if (MS::kSuccess == status) lockM(j) = demLockPlug.asInt(); else lockM(j) = 0;
+			MPlug demLockPlug = boneDagFn.findPlug(lockWeightsAttr, &status);
+			if (MS::kSuccess == status) 
+				lockM(j) = demLockPlug.asInt(); 
+			else lockM(j) = 0;
 		}
 
 		// update model: skeleton animation
@@ -468,7 +471,7 @@ public:
 
 		status = fnMayaSkinMesh->setWeights(
 			mayaSkinMeshDagpath,
-			mayaSkinMeshDagpath.node(),
+			MObject(),
 			indices,
 			Conversion::toMDoubleArray(weightsMaya)
 		);

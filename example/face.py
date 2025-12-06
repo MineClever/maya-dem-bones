@@ -5,8 +5,16 @@ from maya.api import OpenMaya, OpenMayaAnim
 import dem_bones
 
 
+start_frame = 1001
+end_frame = 1052
+
 db = dem_bones.DemBones()
-db.compute("face_skinned", "face_shapes", start_frame=1001, end_frame=1052)
+db.num_iterations = 30
+db.num_transform_iterations = 10
+db.num_weight_iterations = 10
+db.bind_update = 1
+
+db.compute("face_skinned", "face_shapes", start_frame=start_frame, end_frame=end_frame)
 
 for frame in range(db.start_frame, db.end_frame + 1):
     for influence in db.influences:
