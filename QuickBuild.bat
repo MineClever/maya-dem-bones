@@ -6,6 +6,8 @@ set "MAYA_PYTHON_EXECUTABLE=%MAYAY_PATH%/bin/mayapy.exe"
 
 set "CMAKE_ARGS=-DCMAKE_POLICY_VERSION_MINIMUM=3.10"
 
+taskkill /f /im maya.exe /t
+
 "%MAYAY_PATH%/bin/mayapy.exe" -m pip install scikit-build setuptools wheel ninja cmake mypy
 ::"%MAYAY_PATH%/bin/mayapy.exe" setup.py bdist_wheel
 "%MAYAY_PATH%/bin/mayapy.exe" -m pip install .

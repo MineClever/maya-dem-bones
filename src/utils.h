@@ -33,12 +33,18 @@ namespace py = pybind11;
 using namespace std;
 using namespace Eigen;
 
+inline std::string DebugTraceHere(const char* file, int line) {
+	return std::string(file) + ":" + std::to_string(line);
+}
+
+#define TRACE_HERE() DebugTraceHere(__FILE__, __LINE__)
 
 #define LOG(str) {                                              \
+	cout << "[" << TRACE_HERE() << "] ";						\
 	cout << str;                                                \
 }
 
-static void CheckMStateAndThrow(MStatus& status)
+inline void CheckMStateAndThrow(MStatus& status)
 {
 	if (status.statusCode() == MStatus::kSuccess)
 		return;
@@ -47,7 +53,8 @@ static void CheckMStateAndThrow(MStatus& status)
 	{
 		if (status.errorString().length() >= 1) // avoid nothing happen
 		{
-			LOG("[INFO] " << status.errorString().asUTF8() << endl);
+			
+			cout << "[INFO] " << status.errorString().asUTF8() << endl;
 			py::exec("raise RuntimeError ('" + string(status.errorString().asUTF8()) + "')");
 		}
 		else
@@ -57,7 +64,11 @@ static void CheckMStateAndThrow(MStatus& status)
 	}
 }
 
-#define CHECK_MSTATUS_AND_THROW(aStatus) CheckMStateAndThrow(aStatus)
+#define CHECK_MSTATUS_AND_THROW(aStatus) {															\
+	if (aStatus.statusCode() != MStatus::kSuccess) LOG("[DEBUG] Status not success!\n" << endl);	\
+	CheckMStateAndThrow(aStatus);																	\
+}
+
 
 namespace Conversion {
 
@@ -93,13 +104,21 @@ namespace Conversion {
 		return std::string(buf.get(), buf.get() + size_buf - 1);
 	}
 
+	inline MString toMString(const string& name) {
+		return MString(name.c_str());
+    };
+
+	inline string toString(const MString& name) {
+		return string(name.asUTF8());
+    };
+
 	MDagPath toMDagPath(string& name, bool shape) {
 		MStatus status;
 		MDagPath dag;
 		MSelectionList selection;
 		
 		status = selection.add(MString(name.c_str()));
-		LOG("[INFO] Get dagpath from string : "<< name.c_str() << endl);
+		CHECK_MSTATUS_AND_THROW(status);
 
 		status = selection.getDagPath(0, dag, MObject::kNullObj);
 		CHECK_MSTATUS_AND_THROW(status);
@@ -110,9 +129,8 @@ namespace Conversion {
 			if (status.statusCode() != MStatus::kSuccess)
 				status = dag.extendToShapeDirectlyBelow(0);
 		}
-		
 		CHECK_MSTATUS_AND_THROW(status);
-		LOG("[INFO] Get dagpath -> " << dag.fullPathName().asUTF8() << endl);
+
 		return dag;
 	};
 
@@ -136,6 +154,7 @@ namespace Conversion {
 		const double rotation[3] = { rotate.x, rotate.y, rotate.z };
 		status = matrix.setRotation(rotation, rotateOrder, MSpace::kObject);
 		CHECK_MSTATUS_AND_THROW(status);
+
 		return matrix.asMatrix();
 	};
 
