@@ -500,7 +500,7 @@ public:
 				string name = boneName[j];
 
 				MMatrix resetPostMatrix = bindMatricesMaya[name];
-                MDagPath bonePath = Conversion::toMDagPath(name, false);
+				MDagPath bonePath = Conversion::toMDagPath(name, false);
 				MFnTransform boneDagFn(bonePath, &status);
 				boneDagFn.set(resetPostMatrix);
 
@@ -515,14 +515,20 @@ public:
 			MGlobal::executeCommandStringResult(cmd, false, false, &status);
 			if (status.statusCode() != MStatus::kSuccess)
 			{
-                Conversion::RaiseException("Failed to create skin cluster in Maya.");
+                MGlobal::displayWarning("Create skin cluster -> " + status.errorString());
 			}
 
             // Re-fetch skin cluster
 			MItDependencyGraph graphIter(skinMeshObj, MFn::kSkinClusterFilter, MItDependencyGraph::kUpstream);
-			MObject rootNode = graphIter.currentItem(&status);
-			status = fnMayaSkinMesh->setObject(rootNode);
-			CHECK_MSTATUS_AND_THROW(status);
+			for (; !graphIter.isDone(); graphIter.next()) {
+				MObject skinObj = graphIter.currentItem();
+				if (skinObj.hasFn(MFn::kSkinClusterFilter)) {
+					fnMayaSkinMesh = std::make_shared<MFnSkinCluster>(skinObj, &status);
+					CHECK_MSTATUS_AND_THROW(status);
+					bFoundValidSkinCluster = true;
+					break;
+				}
+			}
 		}
 
 		if (bFoundValidSkinCluster)
@@ -533,11 +539,11 @@ public:
 			for (auto i = 0; i < bonesMaya.size(); ++i) {
 				indices[i] = i;
 			}
-
-			LOG("Set weight to mesh");
+            
+			LOG("Set weight to mesh" << endl);
 			status = fnMayaSkinMesh->setWeights(
 				mayaSkinMeshDagpath,
-				MObject(),
+				fnMayaSkinMesh->getComponentAtIndex(0),
 				indices,
 				Conversion::toMDoubleArray(weightsMaya)
 			);
@@ -591,24 +597,33 @@ public:
 		MStatus st;
 		bonesMayaDagpathArray.clear();
 		LOG("Start Build Bind Matrix" << endl);
+
+		// 创建 joints 并记录 dagPath
 		for (int j = 0; j < nB; ++j) {
 			std::lock_guard<std::mutex> lock(mtx_);
 			// 尝试从 bind 矩阵中读取平移（bind 是 DemBonesExt 的成员）
 			Matrix4d bindMat = Matrix4d::Identity();
-			bindMat = Matrix4d::Identity();
-			bindMat(0, 3) = u.row(0).mean();
-			bindMat(1, 3) = u.row(1).mean();
-			bindMat(2, 3) = u.row(2).mean();
+			// 如果 bind 数据存在且有效，优先从 bind.blk4 读取位置
+			if ((int)bind.rows() >= 4 && (int)bind.cols() >= (j+1)*4) {
+				bindMat = bind.blk4(0, j);
+			} else {
+				// fallback 到点云中心
+				bindMat(0, 3) = u.row(0).mean();
+				bindMat(1, 3) = u.row(1).mean();
+				bindMat(2, 3) = u.row(2).mean();
+			}
 
 			MVector pos((double)bindMat(0, 3), (double)bindMat(1, 3), (double)bindMat(2, 3));
 			MFnIkJoint jointFn;
 			MObject jObj;
 			jObj = jointFn.create(); // Workaround with Maya API bug.
+            
 			if (jObj.isNull())
 			{
 				Conversion::RaiseException("Failed to create joint in Maya.");
 				break;
 			}
+			jointFn.setObject(jObj);
 
 			ostringstream sname;
 			sname << "joint_" << j;
@@ -616,8 +631,8 @@ public:
 			jname = jointFn.setName(jname, false, &st);
 			CHECK_MSTATUS_AND_THROW(st);
 
-			// 将 joint 放到 bind 矩阵的平移位置
-			st = jointFn.setTranslation(pos, MSpace::kObject);
+			// 将 joint 放到 bind 矩阵的平移位置（使用世界空间，便于之后 reparent 不改变世界位置）
+			st = jointFn.setTranslation(pos, MSpace::kTransform);
 			CHECK_MSTATUS_AND_THROW(st);
 
 			// 记录骨骼名称与索引到模型
@@ -626,6 +641,26 @@ public:
 			boneName.push_back(name);
 			boneIndex[name] = j;
 			bonesMayaDagpathArray.append(jointFn.dagPath());
+		}
+
+		// 如果有 parent 信息，则按 parent 数组建立父子关系
+		// parent 类型为 ArrayXi，-1 表示 root
+		// 使用 MDagModifier 批量 reparent，最后一次性 doIt()
+		MDagModifier dagMod;
+		bool hasParentInfo = (parent.size() == nB);
+		if (hasParentInfo) {
+			std::lock_guard<std::mutex> lock(mtx_);
+			for (int j = 0; j < nB; ++j) {
+				int p = parent(j);
+				if (p != -1 && p >= 0 && p < nB) {
+					MObject childObj = bonesMayaDagpathArray[j].node();
+					MObject parentObj = bonesMayaDagpathArray[p].node();
+					st = dagMod.reparentNode(childObj, parentObj);
+					CHECK_MSTATUS_AND_THROW(st);
+				}
+			}
+			st = dagMod.doIt();
+			CHECK_MSTATUS_AND_THROW(st);
 		}
 	}
 
