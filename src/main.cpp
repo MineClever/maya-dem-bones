@@ -9,6 +9,7 @@
 #include <DemBones/DemBonesExt.h>
 #include <DemBones/MatBlocks.h>
 #include <Python.h>
+#include <mutex>
 
 #include "Py_MString.h"
 #include "utils.h"
@@ -372,6 +373,7 @@ public:
 		MFnMesh targetMeshFn(targetPath, &status);
 		CHECK_MSTATUS_AND_THROW(status);
 
+
 		// update model
 		nS = 1;
 		sF = startFrame;
@@ -408,8 +410,10 @@ public:
 		MatrixXd lr, lt, gb, lbr, lbt;
 		computeRTB(0, lr, lt, gb, lbr, lbt, false);
 
+		#pragma omp parallel for
 		for (int j = 0; j < nB; j++) {
 			string name = boneName[j];
+			std::lock_guard<std::mutex> lock(mtx_);
 			bonesMaya.push_back(name);
 			MVector translate = MVector(lbt(0, j), lbt(1, j), lbt(2, j));
 			MVector rotate = MVector(lbr(0, j), lbr(1, j), lbr(2, j));
@@ -511,6 +515,9 @@ private:
 	MAnimControl anim;
 	MPointArray points;
 	map<string, int> boneIndex;
+
+	// Add Lock
+	mutable std::mutex mtx_;
 } model;
 
 
