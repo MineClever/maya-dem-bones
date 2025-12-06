@@ -151,9 +151,7 @@ namespace Conversion {
 		status = matrix.setTranslation(translate, MSpace::kObject);
 		CHECK_MSTATUS_AND_THROW(status);
 
-		const double rotation[3] = { rotate.x, rotate.y, rotate.z };
-		status = matrix.setRotation(rotation, rotateOrder, MSpace::kObject);
-		CHECK_MSTATUS_AND_THROW(status);
+		matrix = matrix.rotateTo(MEulerRotation(rotate));
 
 		return matrix.asMatrix();
 	};

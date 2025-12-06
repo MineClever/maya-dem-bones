@@ -80,10 +80,20 @@ class DemBonesUI(QtWidgets.QDialog):
 
         self.start_frame_sb = QtWidgets.QSpinBox()
         self.start_frame_sb.setRange(-100000, 100000)
-        self.start_frame_sb.setValue(1001)
+        self.start_frame_sb.setValue(0)
         self.end_frame_sb = QtWidgets.QSpinBox()
         self.end_frame_sb.setRange(-100000, 100000)
-        self.end_frame_sb.setValue(1052)
+        self.end_frame_sb.setValue(100)
+
+        self.num_bone_sb = QtWidgets.QSpinBox()
+        self.num_bone_sb.setRange(-1, 99999)
+        self.num_bone_sb.setValue(100)
+        
+        init_iterations_label = QtWidgets.QLabel("init_iterations:")
+        init_iterations_label.setToolTip("Number of iterations during initialization phase.")
+        self.init_iterations_sb = QtWidgets.QSpinBox()
+        self.init_iterations_sb.setRange(1, 1000)
+        self.init_iterations_sb.setValue(10)
 
         # button to set from timeline
         self.timeline_btn = QtWidgets.QPushButton("Use Timeline Range")
@@ -95,8 +105,7 @@ class DemBonesUI(QtWidgets.QDialog):
         params_layout.addWidget(self.num_transform_sb, 1, 1)
         params_layout.addWidget(QtWidgets.QLabel("num_weight_iterations:"), 2, 0)
         params_layout.addWidget(self.num_weight_sb, 2, 1)
-        params_layout.addWidget(QtWidgets.QLabel("bind_update:"), 3, 0)
-        params_layout.addWidget(self.bind_cb, 3, 1)
+
         params_layout.addWidget(QtWidgets.QLabel("start_frame:"), 4, 0)
         params_layout.addWidget(self.start_frame_sb, 4, 1)
         params_layout.addWidget(QtWidgets.QLabel("end_frame:"), 5, 0)
@@ -106,14 +115,25 @@ class DemBonesUI(QtWidgets.QDialog):
         params_group.setLayout(params_layout)
         layout.addWidget(params_group)
 
+        bone_params_group = QtWidgets.QGroupBox("DemBones Init Parameters")
+        bone_params_layout = QtWidgets.QGridLayout()
+        bone_params_layout.addWidget(QtWidgets.QLabel("bind_update:"), 0, 0)
+        bone_params_layout.addWidget(self.bind_cb, 0, 1)
+        bone_params_layout.addWidget(QtWidgets.QLabel("num_bones:"), 1, 0)
+        bone_params_layout.addWidget(self.num_bone_sb, 1, 1)
+        bone_params_layout.addWidget(self.init_iterations_sb, 2, 1)
+        bone_params_layout.addWidget(init_iterations_label, 2, 0)
+        bone_params_group.setLayout(bone_params_layout)
+        layout.addWidget(bone_params_group)
+
         # Options and Run
         self.apply_weights_cb = QtWidgets.QCheckBox("Apply weights to SkinCluster after compute")
         self.apply_weights_cb.setChecked(True)
         # Option to create animation keys for influences
         self.create_keys_cb = QtWidgets.QCheckBox("Create animation keys for influences")
         self.create_keys_cb.setChecked(True)
-        layout.addWidget(self.apply_weights_cb)
-        layout.addWidget(self.create_keys_cb)
+        bone_params_layout.addWidget(self.apply_weights_cb)
+        bone_params_layout.addWidget(self.create_keys_cb)
 
         btn_row = QtWidgets.QHBoxLayout()
         btn_row.addStretch()
@@ -232,6 +252,7 @@ class DemBonesUI(QtWidgets.QDialog):
         db.num_transform_iterations = int(self.num_transform_sb.value())
         db.num_weight_iterations = int(self.num_weight_sb.value())
         db.bind_update = 1 if self.bind_cb.isChecked() else 0
+        db.num_bones = int(self.num_bone_sb.value())
 
         start_frame = int(self.start_frame_sb.value())
         end_frame = int(self.end_frame_sb.value())
@@ -246,8 +267,8 @@ class DemBonesUI(QtWidgets.QDialog):
         # Optionally create animation keys for influences
         if self.create_keys_cb.isChecked():
             # Use db's read-only start/end if available, otherwise use local values
-            s_frame = getattr(db, 'start_frame', start_frame)
-            e_frame = getattr(db, 'end_frame', end_frame)
+            s_frame = db.start_frame
+            e_frame = db.end_frame
             try:
                 for frame in range(s_frame, e_frame + 1):
                     for influence in db.influences:
