@@ -230,6 +230,104 @@ def createJoints(names, radius):
         else:
             om.MGlobal.displayWarning("Joint %s has no 'radius' plug." % names[j])
 
+def api_convert_joint_name_to_mobject(joint_name):
+    """辅助函数：将关节名称转换为 MObject。"""
+    sel = om.MSelectionList()
+    try:
+        sel.add(joint_name)
+    except Exception:
+        return None
+    mobj = om.MObject()
+    try:
+        sel.getDependNode(0, mobj)
+    except Exception:
+        return None
+    return mobj
+
+def api_convert_joints_names_to_mobjects(joint_names):
+    """辅助函数：将关节名称列表转换为 MObject 列表。"""
+    mobjects = []
+    for name in joint_names:
+        mobj = api_convert_joint_name_to_mobject(name)
+        if mobj and not mobj.isNull():
+            mobjects.append(mobj)
+    return mobjects
+
+def api_convert_float_list_to_mdoublearray(float_list):
+    """辅助函数：将 float 列表转换为 MDoubleArray。"""
+    mdouble_array = om.MDoubleArray()
+    for f in float_list:
+        mdouble_array.append(f)
+    return mdouble_array
+
+def api_convert_float_list_to_matrix4(float_list # type: list
+                                      ):
+    """辅助函数：将长度为16的 float 列表转换为 MMatrix。"""
+    if len(float_list) != 16:
+        return None
+    mmatrix = om.MMatrix()
+    for i in range(4):
+        for j in range(4):
+            mmatrix[i][j] = float_list[i * 4 + j]
+    return mmatrix
+
+def api_convert_matrix4_to_float_list(mmatrix # type: om.MMatrix
+                                      ):
+    """辅助函数：将 MMatrix 转换为长度为16的 float 列表。"""
+    float_list = []
+    for i in range(4):
+        for j in range(4):
+            float_list.append(mmatrix[i][j])
+    return float_list
+
+def api_parent_joint_to_joint_api1(child_joint_name, parent_joint_name):
+    """使用 OpenMaya (API 1.0) 将一个关节 parent 到另一个关节下。"""
+    child_mobj = api_convert_joint_name_to_mobject(child_joint_name)
+    parent_mobj = api_convert_joint_name_to_mobject(parent_joint_name)
+    if not child_mobj or child_mobj.isNull():
+        om.MGlobal.displayWarning("Child joint not found: %s" % child_joint_name)
+        return False
+    if not parent_mobj or parent_mobj.isNull():
+        om.MGlobal.displayWarning("Parent joint not found: %s" % parent_joint_name)
+        return False
+
+    dagMod = om.MDagModifier()
+    try:
+        dagMod.reparentNode(child_mobj, parent_mobj)
+        dagMod.doIt()
+    except Exception as e:
+        om.MGlobal.displayWarning("Failed to parent %s to %s: %s" % (child_joint_name, parent_joint_name, e))
+        return False
+
+    return True
+
+def api_parent_joints_to_joint_api1(child_joint_names, parent_joint_name):
+    """使用 OpenMaya (API 1.0) 将多个关节 parent 到另一个关节下。"""
+    parent_mobj = api_convert_joint_name_to_mobject(parent_joint_name)
+    if not parent_mobj or parent_mobj.isNull():
+        om.MGlobal.displayWarning("Parent joint not found: %s" % parent_joint_name)
+        return False
+
+    dagMod = om.MDagModifier()
+    for child_name in child_joint_names:
+        child_mobj = api_convert_joint_name_to_mobject(child_name)
+        if not child_mobj or child_mobj.isNull():
+            om.MGlobal.displayWarning("Child joint not found: %s" % child_name)
+            continue
+        try:
+            dagMod.reparentNode(child_mobj, parent_mobj)
+        except Exception as e:
+            om.MGlobal.displayWarning("Failed to parent %s to %s: %s" % (child_name, parent_joint_name, e))
+            continue
+
+    try:
+        dagMod.doIt()
+    except Exception as e:
+        om.MGlobal.displayWarning("Failed to execute parenting operations: %s" % e)
+        return False
+
+    return True
+
 
 if __name__ == "__main__":
     """小脚本示例：
