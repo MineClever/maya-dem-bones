@@ -205,11 +205,13 @@ class DemBonesUI(QtWidgets.QDialog):
             self.skincluster_le.setText(candidates[0])
             cmds.inViewMessage(amg='Detected skinCluster: <hl>{}</hl>'.format(candidates[0]), pos='midCenter', fade=True, fadeInTime=0.1, fadeStayTime=1.0, fadeOutTime=0.2)
         else:
+            self.skincluster_le.clear()
             cmds.inViewMessage(amg='No skinCluster found for <hl>{}</hl>'.format(mesh_name), pos='midCenter', fade=True, fadeInTime=0.1, fadeStayTime=1.0, fadeOutTime=0.2)
 
     def _apply_weights_to_skincluster(self, db):
         # type: (dem_bones.DemBones) -> None
         tgt_name = self.target_le.text().strip()
+        self._auto_detect_skincluster_from(tgt_name)
         if not tgt_name:
             cmds.warning("No target specified to apply weights.")
             return
@@ -264,8 +266,6 @@ class DemBonesUI(QtWidgets.QDialog):
         if not src or not tgt:
             QtWidgets.QMessageBox.warning(self, 'Missing', 'Please set both Source and Target.')
             return
-
-        self._auto_detect_skincluster_from(tgt)
 
         db = dem_bones.DemBones()
         db.num_iterations = int(self.num_iter_sb.value())
