@@ -119,20 +119,29 @@ class DemBonesUI(QtWidgets.QDialog):
         self.bind_cb = QtWidgets.QCheckBox()
         self.bind_cb.setChecked(False)
 
+        self.add_joint_root = QtWidgets.QCheckBox()
+        self.add_joint_root.setChecked(True)
+
         self.num_bone_sb = QtWidgets.QSpinBox()
         self.num_bone_sb.setRange(-1, 99999)
         self.num_bone_sb.setValue(100)
+
+        root_label = QtWidgets.QLabel("auto_root:")
+        root_label.setToolTip("If checked, a root joint will be created to parent all generated bones.")
+        root_label.setWordWrap(True)
         
         bone_params_layout.addWidget(QtWidgets.QLabel("bind_update:"), 0, 0)
         bone_params_layout.addWidget(self.bind_cb, 0, 1)
-        bone_params_layout.addWidget(QtWidgets.QLabel("num_bones:"), 1, 0)
-        bone_params_layout.addWidget(self.num_bone_sb, 1, 1)
+        bone_params_layout.addWidget(root_label, 1, 0)
+        bone_params_layout.addWidget(self.add_joint_root, 1, 1)
+        bone_params_layout.addWidget(QtWidgets.QLabel("num_bones:"), 2, 0)
+        bone_params_layout.addWidget(self.num_bone_sb, 2, 1)
 
-        bone_params_layout.addWidget(init_iterations_label, 2, 0)
-        bone_params_layout.addWidget(self.init_iterations_sb, 2, 1)
+        bone_params_layout.addWidget(init_iterations_label, 3, 0)
+        bone_params_layout.addWidget(self.init_iterations_sb, 3, 1)
 
-        bone_params_layout.addWidget(max_influences_label, 3, 0)
-        bone_params_layout.addWidget(self.max_influences_sb, 3, 1)
+        bone_params_layout.addWidget(max_influences_label, 4, 0)
+        bone_params_layout.addWidget(self.max_influences_sb, 4, 1)
         
         bone_params_group.setLayout(bone_params_layout)
         layout.addWidget(bone_params_group)
@@ -208,6 +217,29 @@ class DemBonesUI(QtWidgets.QDialog):
             self.skincluster_le.clear()
             cmds.inViewMessage(amg='No skinCluster found for <hl>{}</hl>'.format(mesh_name), pos='midCenter', fade=True, fadeInTime=0.1, fadeStayTime=1.0, fadeOutTime=0.2)
 
+    def _create_root_joint_if_needed(self, db):
+        # type: (dem_bones.DemBones) -> None
+        dagMod = om2.MDagModifier()
+        joint_root_node = dagMod.createNode("joint") #type: om2.MObject
+        dagMod.doIt()
+        om2.MFnDagNode(joint_root_node).setName("root")
+        # NOTE: Add attaribute to lock bones, and show it in channel box
+        numAttr = om2.MFnNumericAttribute()
+        demLockAttr = numAttr.create("demLock", "demLock", om2.MFnNumericData.kBoolean, 1)
+        numAttr.keyable = True
+        fnNode = om2.MFnDependencyNode(joint_root_node)
+        fnNode.addAttribute(demLockAttr)
+        
+        maya_selection_list = om2.MSelectionList()
+        for jnt in db.influences:
+            maya_selection_list.add(jnt)
+        select_iter = om2.MItSelectionList(maya_selection_list)
+        while not select_iter.isDone():
+            jnt_obj = select_iter.getDependNode()
+            dagMod.reparentNode(jnt_obj, joint_root_node)
+            select_iter.next()
+        dagMod.doIt()
+
     def _apply_weights_to_skincluster(self, db):
         # type: (dem_bones.DemBones) -> None
         tgt_name = self.target_le.text().strip()
@@ -223,6 +255,9 @@ class DemBonesUI(QtWidgets.QDialog):
                 matrix = om2.MMatrix(db.bind_matrix(influence))
                 cmds.xform(influence, matrix=matrix, worldSpace=True) # set bind pose
             cmds.skinCluster(tgt_name, *db.influences, tsb=True, mi=db.max_influences) # type: list[str]
+            
+            self._create_root_joint_if_needed(db)
+            
             self._auto_detect_skincluster_from(tgt_name)
         db.update_result_skin_weight(tgt_name)
         
