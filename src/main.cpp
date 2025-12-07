@@ -44,6 +44,9 @@ public:
 	char* lockWeightsSet = "demLock";
     char* lockWeightsAttr = "demLock";
 
+    MString sourceDagShapePathName = "";
+    MString targetDagShapePathName = "";
+
 	// New: allow specifying the number of bones to auto-create when the scene has no bones.
 	// If -1 (default), one bone will be created so computation can proceed.
 	int numBones = -1;
@@ -395,6 +398,8 @@ public:
 		MFnMesh targetMeshFn(targetPath, &status);
 		CHECK_MSTATUS_AND_THROW(status);
 
+        sourceDagShapePathName = sourcePath.fullPathName();
+        targetDagShapePathName = targetPath.fullPathName();
 
 		// update model
 		nS = 1;
@@ -604,47 +609,53 @@ public:
 
 		if (!bFoundValidSkinCluster)
 		{
-			// TODO: Move this part to Python script.
-			/*
-				C++ Part looks really hacky.
-				We create skin cluster here if not found,
-			*/
-			LOG("Creat SkinCluster for Joints" );
-			MString cmd = "skinCluster -tsb";
-			for (int j = 0; j < nB; j++) {
-				string name = boneName[j];
-
-				MMatrix resetPostMatrix = bindMatricesMaya[name];
-				MDagPath bonePath = Conversion::toMDagPath(name, false);
-				MFnTransform boneDagFn(bonePath, &status);
-				boneDagFn.set(resetPostMatrix);
-
-				MString jname(name.c_str());
-				cmd += " " + jname;
-			}
-
-			cmd += " " + mayaSkinMeshDagpath.partialPathName();
-			cmd += ";";
-
-			LOG(Conversion::FormatString("Exec Command: %s", cmd.asChar()) <<endl );
-			MGlobal::executeCommandStringResult(cmd, false, false, &status);
-			if (status.statusCode() != MStatus::kSuccess)
-			{
-				MGlobal::displayWarning("Create skin cluster -> " + status.errorString());
-			}
-
-			// Re-fetch skin cluster
-			MItDependencyGraph graphIter(skinMeshObj, MFn::kSkinClusterFilter, MItDependencyGraph::kUpstream);
-			for (; !graphIter.isDone(); graphIter.next()) {
-				MObject skinObj = graphIter.currentItem();
-				if (skinObj.hasFn(MFn::kSkinClusterFilter)) {
-					fnMayaSkinMesh = std::make_shared<MFnSkinCluster>(skinObj, &status);
-					CHECK_MSTATUS_AND_THROW(status);
-					bFoundValidSkinCluster = true;
-					break;
-				}
-			}
+			Conversion::RaiseException("No valid skin cluster found on the provided mesh.");
+            return;
 		}
+
+		//if (!bFoundValidSkinCluster)
+		//{
+		//	// NOTE: This part has been move to Python script.
+		//	/*
+		//		C++ Part looks really hacky.
+		//		We create skin cluster here if not found,
+		//	*/
+		//	LOG("Creat SkinCluster for Joints" );
+		//	MString cmd = "skinCluster -tsb";
+		//	for (int j = 0; j < nB; j++) {
+		//		string name = boneName[j];
+
+		//		MMatrix resetPostMatrix = bindMatricesMaya[name];
+		//		MDagPath bonePath = Conversion::toMDagPath(name, false);
+		//		MFnTransform boneDagFn(bonePath, &status);
+		//		boneDagFn.set(resetPostMatrix);
+
+		//		MString jname(name.c_str());
+		//		cmd += " " + jname;
+		//	}
+
+		//	cmd += " " + mayaSkinMeshDagpath.partialPathName();
+		//	cmd += ";";
+
+		//	LOG(Conversion::FormatString("Exec Command: %s", cmd.asChar()) <<endl );
+		//	MGlobal::executeCommandStringResult(cmd, false, false, &status);
+		//	if (status.statusCode() != MStatus::kSuccess)
+		//	{
+		//		MGlobal::displayWarning("Create skin cluster -> " + status.errorString());
+		//	}
+
+		//	// Re-fetch skin cluster
+		//	MItDependencyGraph graphIter(skinMeshObj, MFn::kSkinClusterFilter, MItDependencyGraph::kUpstream);
+		//	for (; !graphIter.isDone(); graphIter.next()) {
+		//		MObject skinObj = graphIter.currentItem();
+		//		if (skinObj.hasFn(MFn::kSkinClusterFilter)) {
+		//			fnMayaSkinMesh = std::make_shared<MFnSkinCluster>(skinObj, &status);
+		//			CHECK_MSTATUS_AND_THROW(status);
+		//			bFoundValidSkinCluster = true;
+		//			break;
+		//		}
+		//	}
+		//}
 
 		if (bFoundValidSkinCluster)
 		{
@@ -686,7 +697,7 @@ PYBIND11_MODULE(_core, m) {
 	py::class_<DemBonesModel>(m, "DemBones")
 		.def(py::init<>())
 		.def_readwrite("bind_update", &DemBonesModel::bindUpdate, "Bind transformation update, 0=keep original, 1=set translations to p-norm centroids (using #transAffineNorm) and rotations to identity, 2=do 1 and group joints, default = 0")
-        .def_readwrite("init_iterations", &DemBonesModel::nInitIters, "Number of initialization iterations (k-means), default = 10")
+		.def_readwrite("init_iterations", &DemBonesModel::nInitIters, "Number of initialization iterations (k-means), default = 10")
 		.def_readwrite("num_iterations", &DemBonesModel::nIters, "Number of global iterations, default = 30")
 		.def_readwrite("num_transform_iterations", &DemBonesModel::nTransIters, "Number of bone transformations update iterations per global iteration, default = 5")
 		.def_readwrite("translation_affine", &DemBonesModel::transAffine, "Translations affinity soft constraint, default = 10.0")
@@ -709,5 +720,7 @@ PYBIND11_MODULE(_core, m) {
 		.def("bind_matrix", &DemBonesModel::bindMatrix, "Get the bind matrix for the provided influence", py::arg("influence"))
 		.def("anim_matrix", &DemBonesModel::animMatrix, "Get the animation matrix for the provided influence at the provided frame", py::arg("influence"), py::arg("frame"))
 		.def("update_result_skin_weight", &DemBonesModel::updateResultSkinWeight, py::arg("skin_mesh"))
+		.def_readonly("skin_mesh_shape_name", &DemBonesModel::sourceDagShapePathName,"sourceDagShapePathName")
+		.def_readonly("vertex_anim_mesh_shape_name", &DemBonesModel::sourceDagShapePathName, "sourceDagShapePathName")
 		;
 }

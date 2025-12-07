@@ -80,6 +80,12 @@ class DemBones:
     weights: List[float]
     """所有顶点和骨骼的权重列表。"""
 
+    skin_mesh_shape_name: str
+    """蒙皮网格的形状节点名称。"""
+
+    vertex_anim_mesh_shape_name: str
+    """动画网格的形状节点名称。"""
+
     # ---------------- 方法 ----------------
     def rmse(self) -> float:
         """

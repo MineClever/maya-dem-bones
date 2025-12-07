@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import math
 from maya import cmds
-from maya import OpenMaya, OpenMayaAnim, OpenMayaUI as omui
+from maya import OpenMayaUI as omui
 from maya.api import OpenMaya as om2
-from maya.api import OpenMayaAnim as oma2
+from maya.api import OpenMayaAnim as omanim2
 
 from shiboken2 import wrapInstance
 from PySide2 import QtWidgets, QtCore
@@ -209,12 +209,20 @@ class DemBonesUI(QtWidgets.QDialog):
 
     def _apply_weights_to_skincluster(self, db):
         # type: (dem_bones.DemBones) -> None
-        tat_name = self.target_le.text().strip()
-        if not tat_name:
+        tgt_name = self.target_le.text().strip()
+        if not tgt_name:
             cmds.warning("No target specified to apply weights.")
             return
-
-        db.update_result_skin_weight(tat_name)
+        # NOTE: Create skinCluster if not existing?
+        # TODO: If we set a skinMesh as VertexAnimMesh, we should create a copy mesh for skinCluster application
+        if not self.skincluster_le.text().strip():
+            cmds.warning("No skinCluster specified to apply weights. Create one first for <%s>." % db.skin_mesh_shape_name)
+            for influence in db.influences:
+                matrix = om2.MMatrix(db.bind_matrix(influence))
+                cmds.xform(influence, matrix=matrix, worldSpace=True) # set bind pose
+            cmds.skinCluster(tgt_name, *db.influences, tsb=True, mi=db.max_influences) # type: list[str]
+            self._auto_detect_skincluster_from(tgt_name)
+        db.update_result_skin_weight(tgt_name)
         
 
     def closeEvent(self, event):
@@ -257,6 +265,8 @@ class DemBonesUI(QtWidgets.QDialog):
             QtWidgets.QMessageBox.warning(self, 'Missing', 'Please set both Source and Target.')
             return
 
+        self._auto_detect_skincluster_from(tgt)
+
         db = dem_bones.DemBones()
         db.num_iterations = int(self.num_iter_sb.value())
         db.num_transform_iterations = int(self.num_transform_sb.value())
@@ -295,6 +305,7 @@ class DemBonesUI(QtWidgets.QDialog):
                         cmds.setKeyframe("{}.rotateX".format(influence), time=frame, value=math.degrees(rotate.x))
                         cmds.setKeyframe("{}.rotateY".format(influence), time=frame, value=math.degrees(rotate.y))
                         cmds.setKeyframe("{}.rotateZ".format(influence), time=frame, value=math.degrees(rotate.z))
+                        
                 cmds.inViewMessage(amg='Created animation keys for influences', pos='midCenter', fade=True, fadeInTime=0.1, fadeStayTime=1.0, fadeOutTime=0.2)
             except Exception as e:
                 cmds.warning('Failed to create animation keys: {}'.format(e))
