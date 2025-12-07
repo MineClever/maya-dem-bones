@@ -3,25 +3,28 @@
 #include <map>
 #include <vector>
 #include <iostream>
+#include <mutex>
+
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 #include <Eigen/Dense>
 #include <DemBones/DemBonesExt.h>
 #include <DemBones/MatBlocks.h>
-#include <Python.h>
-#include <mutex>
-
-#include "Py_MString.h"
-#include "utils.h"
 
 #include <maya/MFnIkJoint.h>
 #include <maya/MDagModifier.h>
 #include <maya/MItGeometry.h>
 
+#include <Python.h>
+#include "Py_MString.h"
+
+#include "utils.h"
+
 namespace py = pybind11;
 using namespace std;
 using namespace Eigen;
 using namespace Dem;
+using namespace MayaDemBoneUtils;
 
 
 class DemBonesModel : public DemBonesExt<double, float> {
@@ -41,8 +44,8 @@ public:
 	char* lockWeightsSet = "demLock";
     char* lockWeightsAttr = "demLock";
 
-	// 新增：当场景没有骨骼时，允许指定自动创建的骨骼数。
-	// 若为 -1（默认），则会创建 1 根骨骼以保证计算能继续。
+	// New: allow specifying the number of bones to auto-create when the scene has no bones.
+	// If -1 (default), one bone will be created so computation can proceed.
 	int numBones = -1;
 
 	DemBonesModel() : tolerance(1e-3), patience(3) { nIters = 30; clear(); }
@@ -464,95 +467,6 @@ public:
 		anim.setCurrentTime(time);
 	}
 
-	void updateResultSkinWeight(string& skin_mesh)
-	{
-		std::lock_guard<std::mutex> lock(mtx_);
-
-		MDagPath mayaSkinMeshDagpath = Conversion::toMDagPath(skin_mesh, true);
-		MObject skinMeshObj = mayaSkinMeshDagpath.node(&status);
-		CHECK_MSTATUS_AND_THROW(status);
-
-		MItDependencyGraph itDG(skinMeshObj,
-			MFn::kSkinClusterFilter,
-			MItDependencyGraph::kUpstream,
-			MItDependencyGraph::kDepthFirst,
-			MItDependencyGraph::kNodeLevel,
-			&status);
-
-        bool bFoundValidSkinCluster = false;
-		std::shared_ptr<MFnSkinCluster> fnMayaSkinMesh;
-		for (; !itDG.isDone(); itDG.next()) {
-			MObject skinObj = itDG.currentItem();
-			if (skinObj.hasFn(MFn::kSkinClusterFilter)) {
-				fnMayaSkinMesh = std::make_shared<MFnSkinCluster>(skinObj, &status);
-				CHECK_MSTATUS_AND_THROW(status);
-                bFoundValidSkinCluster = true;
-				break;
-			}
-		}
-
-		if (!bFoundValidSkinCluster)
-		{
-
-			LOG("Creat SkinCluster for Joints" << endl);
-			MString cmd = "skinCluster -tsb";
-			for (int j = 0; j < nB; j++) {
-				string name = boneName[j];
-
-				MMatrix resetPostMatrix = bindMatricesMaya[name];
-				MDagPath bonePath = Conversion::toMDagPath(name, false);
-				MFnTransform boneDagFn(bonePath, &status);
-				boneDagFn.set(resetPostMatrix);
-
-				MString jname(name.c_str());
-				cmd += " " + jname;
-			}
-
-			cmd += " " + mayaSkinMeshDagpath.partialPathName();
-			cmd += ";";
-
-			LOG(Conversion::FormatString("Exec Command: %s", cmd.asChar()) << endl);
-			MGlobal::executeCommandStringResult(cmd, false, false, &status);
-			if (status.statusCode() != MStatus::kSuccess)
-			{
-                MGlobal::displayWarning("Create skin cluster -> " + status.errorString());
-			}
-
-            // Re-fetch skin cluster
-			MItDependencyGraph graphIter(skinMeshObj, MFn::kSkinClusterFilter, MItDependencyGraph::kUpstream);
-			for (; !graphIter.isDone(); graphIter.next()) {
-				MObject skinObj = graphIter.currentItem();
-				if (skinObj.hasFn(MFn::kSkinClusterFilter)) {
-					fnMayaSkinMesh = std::make_shared<MFnSkinCluster>(skinObj, &status);
-					CHECK_MSTATUS_AND_THROW(status);
-					bFoundValidSkinCluster = true;
-					break;
-				}
-			}
-		}
-
-		if (bFoundValidSkinCluster)
-		{
-			MIntArray indices;
-
-			indices.setLength(bonesMaya.size());
-			for (auto i = 0; i < bonesMaya.size(); ++i) {
-				indices[i] = i;
-			}
-            
-			LOG("Set weight to mesh" << endl);
-			status = fnMayaSkinMesh->setWeights(
-				mayaSkinMeshDagpath,
-				fnMayaSkinMesh->getComponentAtIndex(0),
-				indices,
-				Conversion::toMDoubleArray(weightsMaya)
-			);
-			CHECK_MSTATUS_AND_THROW(status);
-		}
-
-
-	}
-
 	array<double, 16> bindMatrix(string& bone) {
 		if (bindMatricesMaya.find(bone) == bindMatricesMaya.end())
 			Conversion::RaiseException("Provided influence is not valid.");
@@ -581,33 +495,33 @@ public:
 
 		if (nB > 0) return;
 
-		// 如果场景中确实没有影响（无骨骼），先调用 init() 生成簇/初始绑定，再在 Maya 中创建 joint，
-		// 使 joint 位置基于 init() 产生的绑定矩阵中心（bind.blk4）。
+		// If there are truly no influences (no bones) in the scene, call init() to generate clusters / initial bind,
+		// then create joints in Maya so joint positions are based on centers of bind matrices produced by init() (bind.blk4).
 		int createB = (numBones > 0) ? numBones : 1;
 		LOG("No influences found. Initializing bones (compute clusters): target = " << createB << endl);
 
-		// 设置目标骨骼数量并调用 init()，init() 会执行 LBG-VQ 等初始化，产生 label / bind / w 等。
+		// Set target number of bones and call init(). init() performs initialization (LBG-VQ etc.) producing label/bind/w etc.
 		nB = createB;
 		if (nInitIters <= 0) nInitIters = 10;
 
 		LOG("Init Joints" << endl);
-		init(); // 现在 bind / label / w 等应该已被初始化
+		init(); // now bind / label / w etc. should be initialized
 
-		// 根据 init() 生成的 bind 矩阵放置 joints
+		// Place joints according to bind matrices generated by init()
 		MStatus st;
 		bonesMayaDagpathArray.clear();
 		LOG("Start Build Bind Matrix" << endl);
 
-		// 创建 joints 并记录 dagPath
+		// Create joints and record dagPath
 		for (int j = 0; j < nB; ++j) {
 			std::lock_guard<std::mutex> lock(mtx_);
-			// 尝试从 bind 矩阵中读取平移（bind 是 DemBonesExt 的成员）
+			// Try to read translation from bind matrices (bind is a DemBonesExt member)
 			Matrix4d bindMat = Matrix4d::Identity();
-			// 如果 bind 数据存在且有效，优先从 bind.blk4 读取位置
+			// If bind data exists and is valid, prefer reading position from bind.blk4
 			if ((int)bind.rows() >= 4 && (int)bind.cols() >= (j+1)*4) {
 				bindMat = bind.blk4(0, j);
 			} else {
-				// fallback 到点云中心
+				// Fallback to point cloud centroid
 				bindMat(0, 3) = u.row(0).mean();
 				bindMat(1, 3) = u.row(1).mean();
 				bindMat(2, 3) = u.row(2).mean();
@@ -631,11 +545,11 @@ public:
 			jname = jointFn.setName(jname, false, &st);
 			CHECK_MSTATUS_AND_THROW(st);
 
-			// 将 joint 放到 bind 矩阵的平移位置（使用世界空间，便于之后 reparent 不改变世界位置）
+			// Place joint at translation position from bind matrix (use world space so reparenting won't change world position)
 			st = jointFn.setTranslation(pos, MSpace::kTransform);
 			CHECK_MSTATUS_AND_THROW(st);
 
-			// 记录骨骼名称与索引到模型
+			// Record bone names and indices to the model
 			string name = jname.asChar();
 
 			boneName.push_back(name);
@@ -643,9 +557,9 @@ public:
 			bonesMayaDagpathArray.append(jointFn.dagPath());
 		}
 
-		// 如果有 parent 信息，则按 parent 数组建立父子关系
-		// parent 类型为 ArrayXi，-1 表示 root
-		// 使用 MDagModifier 批量 reparent，最后一次性 doIt()
+		// If parent information exists, build parent-child relationships according to parent array
+		// parent is ArrayXi, -1 denotes root
+		// Use MDagModifier to batch reparent and call doIt() once at the end
 		MDagModifier dagMod;
 		bool hasParentInfo = (parent.size() == nB);
 		if (hasParentInfo) {
@@ -664,6 +578,97 @@ public:
 		}
 	}
 
+	void updateResultSkinWeight(string& skin_mesh)
+	{
+		std::lock_guard<std::mutex> lock(mtx_);
+
+		MDagPath mayaSkinMeshDagpath = Conversion::toMDagPath(skin_mesh, true);
+		MObject skinMeshObj = mayaSkinMeshDagpath.node(&status);
+		CHECK_MSTATUS_AND_THROW(status);
+
+		MItDependencyGraph itDG(skinMeshObj,
+			MFn::kSkinClusterFilter,
+			MItDependencyGraph::kUpstream,
+			MItDependencyGraph::kDepthFirst,
+			MItDependencyGraph::kNodeLevel,
+			&status);
+
+		bool bFoundValidSkinCluster = false;
+		std::shared_ptr<MFnSkinCluster> fnMayaSkinMesh;
+		for (; !itDG.isDone(); itDG.next()) {
+			MObject skinObj = itDG.currentItem();
+			if (skinObj.hasFn(MFn::kSkinClusterFilter)) {
+				fnMayaSkinMesh = std::make_shared<MFnSkinCluster>(skinObj, &status);
+				CHECK_MSTATUS_AND_THROW(status);
+				bFoundValidSkinCluster = true;
+				break;
+			}
+		}
+
+		if (!bFoundValidSkinCluster)
+		{
+			// TODO: Move this part to Python script.
+			/*
+				C++ Part looks really hacky.
+				We create skin cluster here if not found,
+			*/
+			LOG("Creat SkinCluster for Joints" << endl);
+			MString cmd = "skinCluster -tsb";
+			for (int j = 0; j < nB; j++) {
+				string name = boneName[j];
+
+				MMatrix resetPostMatrix = bindMatricesMaya[name];
+				MDagPath bonePath = Conversion::toMDagPath(name, false);
+				MFnTransform boneDagFn(bonePath, &status);
+				boneDagFn.set(resetPostMatrix);
+
+				MString jname(name.c_str());
+				cmd += " " + jname;
+			}
+
+			cmd += " " + mayaSkinMeshDagpath.partialPathName();
+			cmd += ";";
+
+			LOG(Conversion::FormatString("Exec Command: %s", cmd.asChar()) << endl);
+			MGlobal::executeCommandStringResult(cmd, false, false, &status);
+			if (status.statusCode() != MStatus::kSuccess)
+			{
+				MGlobal::displayWarning("Create skin cluster -> " + status.errorString());
+			}
+
+			// Re-fetch skin cluster
+			MItDependencyGraph graphIter(skinMeshObj, MFn::kSkinClusterFilter, MItDependencyGraph::kUpstream);
+			for (; !graphIter.isDone(); graphIter.next()) {
+				MObject skinObj = graphIter.currentItem();
+				if (skinObj.hasFn(MFn::kSkinClusterFilter)) {
+					fnMayaSkinMesh = std::make_shared<MFnSkinCluster>(skinObj, &status);
+					CHECK_MSTATUS_AND_THROW(status);
+					bFoundValidSkinCluster = true;
+					break;
+				}
+			}
+		}
+
+		if (bFoundValidSkinCluster)
+		{
+			MIntArray indices;
+
+			indices.setLength(bonesMaya.size());
+			for (auto i = 0; i < bonesMaya.size(); ++i) {
+				indices[i] = i;
+			}
+
+			LOG("Set weight to mesh" << endl);
+			status = fnMayaSkinMesh->setWeights(
+				mayaSkinMeshDagpath,
+				fnMayaSkinMesh->getComponentAtIndex(0),
+				indices,
+				Conversion::toMDoubleArray(weightsMaya)
+			);
+			CHECK_MSTATUS_AND_THROW(status);
+		}
+
+	}
 
 private:
 	double prevErr;

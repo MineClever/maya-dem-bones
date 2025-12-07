@@ -33,44 +33,50 @@ namespace py = pybind11;
 using namespace std;
 using namespace Eigen;
 
-inline std::string DebugTraceHere(const char* file, int line) {
-	return std::string(file) + ":" + std::to_string(line);
-}
+namespace MayaDemBoneUtils {
 
-#define TRACE_HERE() DebugTraceHere(__FILE__, __LINE__)
+	inline std::string DebugTraceFileLine(const char* file, int line) {
+		return std::string(file) + ":" + std::to_string(line);
+	}
 
-#define LOG(str) {                                              \
-	cout << "[" << TRACE_HERE() << "] ";						\
-	cout << str;                                                \
-}
+	#define TRACE_FILE_LINE() DebugTraceFileLine(__FILE__, __LINE__)
 
-inline void CheckMStateAndThrow(MStatus& status)
-{
-	if (status.statusCode() == MStatus::kSuccess)
-		return;
+	#define LOG(str) {                                              \
+		cout << "[" << TRACE_FILE_LINE() << "] ";					\
+		cout << str << endl;                                        \
+	}
 
-	if (status.error())
+	inline void CheckMStateAndThrow(MStatus& status)
 	{
-		if (status.errorString().length() >= 1) // avoid nothing happen
+		if (status.statusCode() == MStatus::kSuccess)
+			return;
+
+		if (status.error())
 		{
-			
-			cout << "[INFO] " << status.errorString().asUTF8() << endl;
-			py::exec("raise RuntimeError ('" + string(status.errorString().asUTF8()) + "')");
-		}
-		else
-		{
-			MGlobal::displayInfo(status.errorString());
+			if (status.errorString().length() >= 1) // avoid nothing happen
+			{
+
+				cout << "[INFO] " << status.errorString().asUTF8() << endl;
+				py::exec("raise RuntimeError ('" + string(status.errorString().asUTF8()) + "')");
+			}
+			else
+			{
+				MGlobal::displayInfo(status.errorString());
+			}
 		}
 	}
-}
 
-#define CHECK_MSTATUS_AND_THROW(aStatus) {															\
-	if (aStatus.statusCode() != MStatus::kSuccess) LOG("[DEBUG] Status not success!\n" << endl);	\
-	CheckMStateAndThrow(aStatus);																	\
+	#define CHECK_MSTATUS_AND_THROW(aStatus) {															\
+		if (aStatus.statusCode() != MStatus::kSuccess) LOG("[DEBUG] Status not success!\n" << endl);	\
+		CheckMStateAndThrow(aStatus);																	\
+	}
+
 }
 
 
 namespace Conversion {
+
+	using namespace MayaDemBoneUtils;
 
 	inline void RaiseException(const char* aMessage)
 	{
