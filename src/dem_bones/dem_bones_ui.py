@@ -75,25 +75,12 @@ class DemBonesUI(QtWidgets.QDialog):
         self.num_weight_sb.setRange(0, 1000)
         self.num_weight_sb.setValue(10)
 
-        self.bind_cb = QtWidgets.QCheckBox()
-        self.bind_cb.setChecked(False)
-
         self.start_frame_sb = QtWidgets.QSpinBox()
         self.start_frame_sb.setRange(-100000, 100000)
         self.start_frame_sb.setValue(0)
         self.end_frame_sb = QtWidgets.QSpinBox()
         self.end_frame_sb.setRange(-100000, 100000)
         self.end_frame_sb.setValue(100)
-
-        self.num_bone_sb = QtWidgets.QSpinBox()
-        self.num_bone_sb.setRange(-1, 99999)
-        self.num_bone_sb.setValue(100)
-        
-        init_iterations_label = QtWidgets.QLabel("init_iterations:")
-        init_iterations_label.setToolTip("Number of iterations during initialization phase.")
-        self.init_iterations_sb = QtWidgets.QSpinBox()
-        self.init_iterations_sb.setRange(1, 1000)
-        self.init_iterations_sb.setValue(10)
 
         # button to set from timeline
         self.timeline_btn = QtWidgets.QPushButton("Use Timeline Range")
@@ -117,12 +104,36 @@ class DemBonesUI(QtWidgets.QDialog):
 
         bone_params_group = QtWidgets.QGroupBox("DemBones Init Parameters")
         bone_params_layout = QtWidgets.QGridLayout()
+        
+        init_iterations_label = QtWidgets.QLabel("init_iterations:")
+        init_iterations_label.setToolTip("Number of iterations during initialization phase.")
+        self.init_iterations_sb = QtWidgets.QSpinBox()
+        self.init_iterations_sb.setRange(1, 1000)
+        self.init_iterations_sb.setValue(10)
+
+        max_influences_label = QtWidgets.QLabel("max_influences:")
+        self.max_influences_sb = QtWidgets.QSpinBox()
+        self.max_influences_sb.setRange(1, 10)
+        self.max_influences_sb.setValue(4)
+        
+        self.bind_cb = QtWidgets.QCheckBox()
+        self.bind_cb.setChecked(False)
+
+        self.num_bone_sb = QtWidgets.QSpinBox()
+        self.num_bone_sb.setRange(-1, 99999)
+        self.num_bone_sb.setValue(100)
+        
         bone_params_layout.addWidget(QtWidgets.QLabel("bind_update:"), 0, 0)
         bone_params_layout.addWidget(self.bind_cb, 0, 1)
         bone_params_layout.addWidget(QtWidgets.QLabel("num_bones:"), 1, 0)
         bone_params_layout.addWidget(self.num_bone_sb, 1, 1)
-        bone_params_layout.addWidget(self.init_iterations_sb, 2, 1)
+
         bone_params_layout.addWidget(init_iterations_label, 2, 0)
+        bone_params_layout.addWidget(self.init_iterations_sb, 2, 1)
+
+        bone_params_layout.addWidget(max_influences_label, 3, 0)
+        bone_params_layout.addWidget(self.max_influences_sb, 3, 1)
+        
         bone_params_group.setLayout(bone_params_layout)
         layout.addWidget(bone_params_group)
 
@@ -246,13 +257,14 @@ class DemBonesUI(QtWidgets.QDialog):
             QtWidgets.QMessageBox.warning(self, 'Missing', 'Please set both Source and Target.')
             return
 
-
         db = dem_bones.DemBones()
         db.num_iterations = int(self.num_iter_sb.value())
         db.num_transform_iterations = int(self.num_transform_sb.value())
         db.num_weight_iterations = int(self.num_weight_sb.value())
         db.bind_update = 1 if self.bind_cb.isChecked() else 0
         db.num_bones = int(self.num_bone_sb.value())
+        db.init_iterations = int(self.init_iterations_sb.value())
+        db.max_influences = int(self.max_influences_sb.value())
 
         start_frame = int(self.start_frame_sb.value())
         end_frame = int(self.end_frame_sb.value())

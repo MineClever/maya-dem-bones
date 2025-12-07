@@ -51,16 +51,16 @@ public:
 	DemBonesModel() : tolerance(1e-3), patience(3) { nIters = 30; clear(); }
 
 	void cbIterBegin() {
-		LOG("  iteration #" << iter << endl);
+		LOG("  iteration #" << iter );
 	}
 
 	bool cbIterEnd() {
 		double err = rmse();
-		LOG("    rmse = " << err << endl);
+		LOG("    rmse = " << err );
 		if ((err < prevErr * (1 + weightEps)) && ((prevErr - err) < tolerance * prevErr)) {
 			np--;
 			if (np == 0) {
-				LOG("  convergence is reached" << endl);
+				LOG("  convergence is reached" );
 				return true;
 			}
 		}
@@ -75,11 +75,11 @@ public:
 
 	void cbWeightsBegin() {}
 
-	void cbWeightsEnd() { LOG("    updated weights..." << endl); }
+	void cbWeightsEnd() { LOG("    updated weights..." ); }
 
 	void cbTranformationsBegin() {}
 
-	void cbTransformationsEnd() { LOG("    updated transforms..." << endl); }
+	void cbTransformationsEnd() { LOG("    updated transforms..." ); }
 
 	bool cbTransformationsIterEnd() { return false; }
 
@@ -329,11 +329,11 @@ public:
 		if (!hasKeyFrame) m.resize(0, 0);
 
 		// report
-		LOG("extracted source" << endl);
-		LOG("  " << nV << " vertices" << endl);
-		if (nB != 0) LOG("  " << nB << " joints" << endl);
-		if (hasKeyFrame) LOG("  keyframes found" << endl);
-		if (w.size() != 0) LOG("  skinning found" << endl);
+		LOG("extracted source" );
+		LOG("  " << nV << " vertices" );
+		if (nB != 0) LOG("  " << nB << " joints" );
+		if (hasKeyFrame) LOG("  keyframes found" );
+		if (w.size() != 0) LOG("  skinning found" );
 	}
 
 	void extractTarget(MFnMesh& mesh) {
@@ -360,27 +360,27 @@ public:
 			for (int k = fStart(s); k < fStart(s + 1); k++)
 				subjectID(k) = s;
 
-		LOG("extracted target" << endl);
+		LOG("extracted target" );
 	}
 
 	void compute(string& source, string& target, int& startFrame, int& endFrame) {
 		// log parameters
-		LOG("parameters" << endl);
-		LOG("  source                   = " << source << endl);
-		LOG("  target                   = " << target << endl);
-		LOG("  start_frame              = " << startFrame << endl);
-		LOG("  end_frame                = " << endFrame << endl);
-		LOG("  num_iterations           = " << nIters << endl);
-		LOG("  patience                 = " << patience << endl);
-		LOG("  tolerance                = " << tolerance << endl);
-		LOG("  num_transform_iterations = " << nTransIters << endl);
-		LOG("  num_weight_iterations    = " << nWeightsIters << endl);
-		LOG("  translation_affine       = " << transAffine << endl);
-		LOG("  translation_affine_norm  = " << transAffineNorm << endl);
-		LOG("  max_influences           = " << nnz << endl);
-		LOG("  weights_smooth           = " << weightsSmooth << endl);
-		LOG("  weights_smooth_step      = " << weightsSmoothStep << endl);
-		LOG("  weights_epsilon          = " << weightEps << endl);
+		LOG("parameters" );
+		LOG("  source                   = " << source );
+		LOG("  target                   = " << target );
+		LOG("  start_frame              = " << startFrame );
+		LOG("  end_frame                = " << endFrame );
+		LOG("  num_iterations           = " << nIters );
+		LOG("  patience                 = " << patience );
+		LOG("  tolerance                = " << tolerance );
+		LOG("  num_transform_iterations = " << nTransIters );
+		LOG("  num_weight_iterations    = " << nWeightsIters );
+		LOG("  translation_affine       = " << transAffine );
+		LOG("  translation_affine_norm  = " << transAffineNorm );
+		LOG("  max_influences           = " << nnz );
+		LOG("  weights_smooth           = " << weightsSmooth );
+		LOG("  weights_smooth_step      = " << weightsSmoothStep );
+		LOG("  weights_epsilon          = " << weightEps );
 
 		// variables
 		prevErr = -1;
@@ -423,7 +423,7 @@ public:
 		InitBones();
 
 		// compute model
-		LOG("computing" << endl);
+		LOG("computing" );
 		DemBonesExt<double, float>::compute();
 
 		// compute transformations + weights
@@ -452,7 +452,7 @@ public:
 			}
 		}
 
-		LOG("Converting to Maya Weights" << endl);
+		LOG("Converting to Maya Weights" );
 		weightsMaya.resize(nB * nV);
 		Eigen::SparseMatrix<double> wT = w.transpose();
 		for (int j = 0; j < nB; j++)
@@ -498,23 +498,23 @@ public:
 		// If there are truly no influences (no bones) in the scene, call init() to generate clusters / initial bind,
 		// then create joints in Maya so joint positions are based on centers of bind matrices produced by init() (bind.blk4).
 		int createB = (numBones > 0) ? numBones : 1;
-		LOG("No influences found. Initializing bones (compute clusters): target = " << createB << endl);
+		LOG("No influences found. Initializing bones (compute clusters): target = " << createB );
 
 		// Set target number of bones and call init(). init() performs initialization (LBG-VQ etc.) producing label/bind/w etc.
 		nB = createB;
 		if (nInitIters <= 0) nInitIters = 10;
 
-		LOG("Init Joints" << endl);
+		LOG("Init Joints" );
 		init(); // now bind / label / w etc. should be initialized
 
 		// Place joints according to bind matrices generated by init()
-		MStatus st;
+		MStatus& st = status;
 		bonesMayaDagpathArray.clear();
-		LOG("Start Build Bind Matrix" << endl);
+		LOG("Start Build Bind Matrix" );
 
 		// Create joints and record dagPath
 		for (int j = 0; j < nB; ++j) {
-			std::lock_guard<std::mutex> lock(mtx_);
+            std::lock_guard<std::mutex> lock(mtx_); // Always lock when creating Maya objects.
 			// Try to read translation from bind matrices (bind is a DemBonesExt member)
 			Matrix4d bindMat = Matrix4d::Identity();
 			// If bind data exists and is valid, prefer reading position from bind.blk4
@@ -537,11 +537,10 @@ public:
 				Conversion::RaiseException("Failed to create joint in Maya.");
 				break;
 			}
-			jointFn.setObject(jObj);
+			// jointFn.setObject(jObj); // Ensure update.
 
-			ostringstream sname;
-			sname << "joint_" << j;
-			MString jname(sname.str().c_str());
+			string name = Conversion::FormatString("def_joint_%d", j);
+			MString jname(name.c_str());
 			jname = jointFn.setName(jname, false, &st);
 			CHECK_MSTATUS_AND_THROW(st);
 
@@ -550,8 +549,6 @@ public:
 			CHECK_MSTATUS_AND_THROW(st);
 
 			// Record bone names and indices to the model
-			string name = jname.asChar();
-
 			boneName.push_back(name);
 			boneIndex[name] = j;
 			bonesMayaDagpathArray.append(jointFn.dagPath());
@@ -612,7 +609,7 @@ public:
 				C++ Part looks really hacky.
 				We create skin cluster here if not found,
 			*/
-			LOG("Creat SkinCluster for Joints" << endl);
+			LOG("Creat SkinCluster for Joints" );
 			MString cmd = "skinCluster -tsb";
 			for (int j = 0; j < nB; j++) {
 				string name = boneName[j];
@@ -629,7 +626,7 @@ public:
 			cmd += " " + mayaSkinMeshDagpath.partialPathName();
 			cmd += ";";
 
-			LOG(Conversion::FormatString("Exec Command: %s", cmd.asChar()) << endl);
+			LOG(Conversion::FormatString("Exec Command: %s", cmd.asChar()) <<endl );
 			MGlobal::executeCommandStringResult(cmd, false, false, &status);
 			if (status.statusCode() != MStatus::kSuccess)
 			{
@@ -658,7 +655,7 @@ public:
 				indices[i] = i;
 			}
 
-			LOG("Set weight to mesh" << endl);
+			LOG("Set weight to mesh" );
 			status = fnMayaSkinMesh->setWeights(
 				mayaSkinMeshDagpath,
 				fnMayaSkinMesh->getComponentAtIndex(0),
