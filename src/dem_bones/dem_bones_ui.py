@@ -219,6 +219,9 @@ class DemBonesUI(QtWidgets.QDialog):
 
     def _create_root_joint_if_needed(self, db):
         # type: (dem_bones.DemBones) -> None
+        if self.add_joint_root.isChecked() == False:
+            return
+        
         dagMod = om2.MDagModifier()
         joint_root_node = dagMod.createNode("joint") #type: om2.MObject
         dagMod.doIt()
