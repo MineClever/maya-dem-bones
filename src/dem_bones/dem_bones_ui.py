@@ -382,9 +382,10 @@ class DemBonesUI(QtWidgets.QDialog):
         if (db.bind_update == 2):
             cmds.warning("will not Create root joint, bind_update == 2.")
             return
-
+        
+        dagMod = om2.MDagModifier()
+        
         if not cmds.objExists("root"):
-            dagMod = om2.MDagModifier()
             joint_root_node = dagMod.createNode("joint") #type: om2.MObject
             dagMod.doIt()
             om2.MFnDagNode(joint_root_node).setName("root")
