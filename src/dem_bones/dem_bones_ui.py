@@ -189,6 +189,9 @@ class DemBonesUI(QtWidgets.QDialog):
 
     def detect_skincluster(self):
         tat = self.target_le.text().strip()
+        if not cmds.objExists(tat):
+            self.target_le.clear()
+        
         if not tat:
             cmds.warning("Target is empty. Select a source or click Select Target first.")
             return
@@ -196,6 +199,9 @@ class DemBonesUI(QtWidgets.QDialog):
 
     def _auto_detect_skincluster_from(self, mesh_name: str):
         # If transform provided, try shape
+        if not cmds.objExists(mesh_name):
+            self.skincluster_le.clear()
+        
         shapes = cmds.listRelatives(mesh_name, shapes=True, fullPath=True) or []
         candidates = []
         if shapes:
@@ -246,10 +252,18 @@ class DemBonesUI(QtWidgets.QDialog):
     def _apply_weights_to_skincluster(self, db):
         # type: (dem_bones.DemBones) -> None
         tgt_name = self.target_le.text().strip()
-        self._auto_detect_skincluster_from(tgt_name)
+        
         if not tgt_name:
             cmds.warning("No target specified to apply weights.")
             return
+        
+        if not cmds.objExists(tgt_name):
+            self.skincluster_le.clear()
+            cmds.warning("No target specified to apply weights.")
+            return
+        
+        self._auto_detect_skincluster_from(tgt_name)
+        
         # NOTE: Create skinCluster if not existing?
         # TODO: If we set a skinMesh as VertexAnimMesh, we should create a copy mesh for skinCluster application
         if not self.skincluster_le.text().strip():
