@@ -10,6 +10,85 @@ from shiboken2 import wrapInstance
 from PySide2 import QtWidgets, QtCore
 import dem_bones
 
+
+class CollapsibleGroupBox(QtWidgets.QWidget):
+    """A simple collapsible group box with a clickable header.
+
+    Usage:
+        g = CollapsibleGroupBox("Title", collapsed=True)
+        g.setContentLayout(a_layout)
+        parent_layout.addWidget(g)
+    """
+    def __init__(self, title: str = "", parent=None, collapsed: bool = True):
+        super(CollapsibleGroupBox, self).__init__(parent)
+
+        self._toggle = QtWidgets.QToolButton(text=title)
+        self._toggle.setStyleSheet("QToolButton { border: none; }")
+        self._toggle.setToolButtonStyle(QtCore.Qt.ToolButtonTextBesideIcon)
+        self._toggle.setCheckable(True)
+        # checked == expanded
+        self._toggle.setChecked(not collapsed)
+        self._toggle.setArrowType(QtCore.Qt.DownArrow if not collapsed else QtCore.Qt.RightArrow)
+        self._toggle.clicked.connect(self._on_toggled)
+
+        self._content = QtWidgets.QWidget()
+        self._content.setVisible(not collapsed)
+        # when collapsed we set maximum height to 0 so layouts shrink
+        if collapsed:
+            self._content.setMaximumHeight(0)
+
+        lay = QtWidgets.QVBoxLayout(self)
+        lay.setSpacing(0)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.addWidget(self._toggle)
+        lay.addWidget(self._content)
+
+    def setContentLayout(self, layout: QtWidgets.QLayout) -> None:
+        # replace existing layout if any
+        old = self._content.layout()
+        if old is not None:
+            QtWidgets.QWidget().setLayout(old)
+        self._content.setLayout(layout)
+        # update maximum height according to current toggle state so
+        # parent layouts can shrink when collapsed
+        try:
+            if not self._toggle.isChecked():
+                self._content.setMaximumHeight(0)
+            else:
+                # allow content to size to its hint
+                self._content.setMaximumHeight(self._content.sizeHint().height() or 16777215)
+        except Exception:
+            pass
+        try:
+            self.updateGeometry()
+            win = self.window()
+            if win is not None:
+                win.adjustSize()
+        except Exception:
+            pass
+
+    def _on_toggled(self):
+        checked = self._toggle.isChecked()
+        self._content.setVisible(checked)
+        self._toggle.setArrowType(QtCore.Qt.DownArrow if checked else QtCore.Qt.RightArrow)
+        try:
+            if not checked:
+                self._content.setMaximumHeight(0)
+            else:
+                # restore to content preferred height
+                self._content.setMaximumHeight(self._content.sizeHint().height() or 16777215)
+        except Exception:
+            pass
+        # notify layouts and top-level window to adjust size
+        try:
+            self.updateGeometry()
+            win = self.window()
+            if win is not None:
+                win.adjustSize()
+        except Exception:
+            pass
+
+
 def get_maya_main_window():
     ptr = omui.MQtUtil.mainWindow()
     return wrapInstance(int(ptr), QtWidgets.QWidget)
@@ -60,7 +139,76 @@ class DemBonesUI(QtWidgets.QDialog):
         layout.addLayout(sc_row)
 
         # Parameters
-        params_group = QtWidgets.QGroupBox("DemBones Parameters")
+
+        #--------------------- Time Range ---------------------#
+        time_range_group = CollapsibleGroupBox("Basic Parameters", collapsed=False)
+        time_range_layout = QtWidgets.QGridLayout()
+        
+        self.start_frame_sb = QtWidgets.QSpinBox()
+        self.start_frame_sb.setRange(-100000, 100000)
+        self.start_frame_sb.setValue(0)
+        self.end_frame_sb = QtWidgets.QSpinBox()
+        self.end_frame_sb.setRange(-100000, 100000)
+        self.end_frame_sb.setValue(100)
+        
+        time_range_layout.addWidget(QtWidgets.QLabel("start_frame:"), 0, 0)
+        time_range_layout.addWidget(self.start_frame_sb, 0, 1)
+        time_range_layout.addWidget(QtWidgets.QLabel("end_frame:"), 1, 0)
+        time_range_layout.addWidget(self.end_frame_sb, 1, 1)
+        
+        # button to set from timeline
+        self.timeline_btn = QtWidgets.QPushButton("Use Timeline Range")
+        self.timeline_btn.clicked.connect(self.use_timeline_range)
+        time_range_layout.addWidget(self.timeline_btn, 2, 1)
+
+        # Options and Run
+        self.apply_weights_cb = QtWidgets.QCheckBox("Apply weights to SkinCluster")
+        self.apply_weights_cb.setChecked(True)
+        # Option to create animation keys for influences
+        self.create_keys_cb = QtWidgets.QCheckBox("Create animation keys")
+        self.create_keys_cb.setChecked(True)
+        
+        time_range_layout.addWidget(self.apply_weights_cb, 3, 0)
+        time_range_layout.addWidget(self.create_keys_cb, 4, 0)
+        
+        time_range_group.setContentLayout(time_range_layout)
+        layout.addWidget(time_range_group)
+
+        #--------------------- Skin Parameters ---------------------#
+        skin_params_group = CollapsibleGroupBox("DemBones Skin Parameters", collapsed=True)
+        skin_params_layout = QtWidgets.QGridLayout()
+
+        max_influences_label = QtWidgets.QLabel("max_influences:")
+        self.max_influences_sb = QtWidgets.QSpinBox()
+        self.max_influences_sb.setRange(1, 10)
+        self.max_influences_sb.setValue(4)
+
+        weights_smooth_label = QtWidgets.QLabel("weights_smooth:")
+        self.weights_smooth_sb = QtWidgets.QDoubleSpinBox()
+        self.weights_smooth_sb.setRange(0.0, 1.0)
+        self.weights_smooth_sb.setDecimals(4)
+        self.weights_smooth_sb.setValue(1e-4)
+
+        weights_smooth_step_label = QtWidgets.QLabel("weights_smooth_step:")
+        self.weights_smooth_step_sb = QtWidgets.QDoubleSpinBox()
+        self.weights_smooth_step_sb.setRange(0.0, 10.0)
+        self.weights_smooth_step_sb.setDecimals(2)
+        self.weights_smooth_step_sb.setValue(1.0)
+        
+        
+        skin_params_layout.addWidget(max_influences_label, 0, 0)
+        skin_params_layout.addWidget(self.max_influences_sb, 0, 1)
+
+        skin_params_layout.addWidget(weights_smooth_label, 1, 0)
+        skin_params_layout.addWidget(self.weights_smooth_sb, 1, 1)
+        skin_params_layout.addWidget(weights_smooth_step_label, 2, 0)
+        skin_params_layout.addWidget(self.weights_smooth_step_sb, 2, 1)
+        
+        skin_params_group.setContentLayout(skin_params_layout)
+        layout.addWidget(skin_params_group)
+
+        #--------------------- DemBones Parameters ------------------#
+        params_group = CollapsibleGroupBox("DemBones Parameters", collapsed=True)
         params_layout = QtWidgets.QGridLayout()
 
         self.num_iter_sb = QtWidgets.QSpinBox()
@@ -75,34 +223,30 @@ class DemBonesUI(QtWidgets.QDialog):
         self.num_weight_sb.setRange(0, 1000)
         self.num_weight_sb.setValue(3)
 
-        self.start_frame_sb = QtWidgets.QSpinBox()
-        self.start_frame_sb.setRange(-100000, 100000)
-        self.start_frame_sb.setValue(0)
-        self.end_frame_sb = QtWidgets.QSpinBox()
-        self.end_frame_sb.setRange(-100000, 100000)
-        self.end_frame_sb.setValue(100)
 
-        # button to set from timeline
-        self.timeline_btn = QtWidgets.QPushButton("Use Timeline Range")
-        self.timeline_btn.clicked.connect(self.use_timeline_range)
+        self.affine_norm_sb = QtWidgets.QDoubleSpinBox()
+        self.affine_norm_sb.setRange(1.0, 10.0)
+        self.affine_norm_sb.setValue(4.0)
 
+        self.affine_sb = QtWidgets.QDoubleSpinBox()
+        self.affine_sb.setRange(0.0, 1000.0)
+        self.affine_sb.setValue(10.0)
+        
         params_layout.addWidget(QtWidgets.QLabel("num_iterations:"), 0, 0)
         params_layout.addWidget(self.num_iter_sb, 0, 1)
         params_layout.addWidget(QtWidgets.QLabel("num_transform_iterations:"), 1, 0)
         params_layout.addWidget(self.num_transform_sb, 1, 1)
         params_layout.addWidget(QtWidgets.QLabel("num_weight_iterations:"), 2, 0)
         params_layout.addWidget(self.num_weight_sb, 2, 1)
-
-        params_layout.addWidget(QtWidgets.QLabel("start_frame:"), 4, 0)
-        params_layout.addWidget(self.start_frame_sb, 4, 1)
-        params_layout.addWidget(QtWidgets.QLabel("end_frame:"), 5, 0)
-        params_layout.addWidget(self.end_frame_sb, 5, 1)
-        params_layout.addWidget(self.timeline_btn, 5, 2)
-
-        params_group.setLayout(params_layout)
+        params_layout.addWidget(QtWidgets.QLabel("translation_affine:"), 3, 0)
+        params_layout.addWidget(self.affine_sb, 3, 1)
+        params_layout.addWidget(QtWidgets.QLabel("translation_affine_norm:"), 4, 0)
+        params_layout.addWidget(self.affine_norm_sb, 4, 1)
+        
+        params_group.setContentLayout(params_layout)
         layout.addWidget(params_group)
 
-        bone_params_group = QtWidgets.QGroupBox("DemBones Init Parameters")
+        bone_params_group = CollapsibleGroupBox("DemBones Init Parameters", collapsed=True)
         bone_params_layout = QtWidgets.QGridLayout()
         
         init_iterations_label = QtWidgets.QLabel("init_iterations:")
@@ -110,11 +254,6 @@ class DemBonesUI(QtWidgets.QDialog):
         self.init_iterations_sb = QtWidgets.QSpinBox()
         self.init_iterations_sb.setRange(1, 1000)
         self.init_iterations_sb.setValue(10)
-
-        max_influences_label = QtWidgets.QLabel("max_influences:")
-        self.max_influences_sb = QtWidgets.QSpinBox()
-        self.max_influences_sb.setRange(1, 10)
-        self.max_influences_sb.setValue(4)
         
         # bind_update: switched from checkbox to combo box supporting integer values (now 0/1/2)
         self.bind_combo = QtWidgets.QComboBox()
@@ -153,21 +292,10 @@ class DemBonesUI(QtWidgets.QDialog):
         bone_params_layout.addWidget(init_iterations_label, 3, 0)
         bone_params_layout.addWidget(self.init_iterations_sb, 3, 1)
 
-        bone_params_layout.addWidget(max_influences_label, 4, 0)
-        bone_params_layout.addWidget(self.max_influences_sb, 4, 1)
         
-        bone_params_group.setLayout(bone_params_layout)
+        bone_params_group.setContentLayout(bone_params_layout)
         layout.addWidget(bone_params_group)
 
-        # Options and Run
-        self.apply_weights_cb = QtWidgets.QCheckBox("Apply weights to SkinCluster after compute")
-        self.apply_weights_cb.setChecked(True)
-        # Option to create animation keys for influences
-        self.create_keys_cb = QtWidgets.QCheckBox("Create animation keys for influences")
-        self.create_keys_cb.setChecked(True)
-        
-        bone_params_layout.addWidget(self.apply_weights_cb,5,0)
-        bone_params_layout.addWidget(self.create_keys_cb,5,1)
 
         btn_row = QtWidgets.QHBoxLayout()
         btn_row.addStretch()
@@ -411,6 +539,9 @@ class DemBonesUI(QtWidgets.QDialog):
             self._apply_weights_to_skincluster(db)
 
         QtWidgets.QMessageBox.information(self, 'Done', 'DemBones run complete.')
+
+        if db.rmse() > 1.0:
+            QtWidgets.QMessageBox.information(self, 'OK', "High RMSE detected: {:.4f}".format(db.rmse()))
 
 
 _dlg = None
