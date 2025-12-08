@@ -65,15 +65,15 @@ class DemBonesUI(QtWidgets.QDialog):
 
         self.num_iter_sb = QtWidgets.QSpinBox()
         self.num_iter_sb.setRange(1, 1000)
-        self.num_iter_sb.setValue(30)
+        self.num_iter_sb.setValue(5)
 
         self.num_transform_sb = QtWidgets.QSpinBox()
         self.num_transform_sb.setRange(0, 1000)
-        self.num_transform_sb.setValue(10)
+        self.num_transform_sb.setValue(3)
 
         self.num_weight_sb = QtWidgets.QSpinBox()
         self.num_weight_sb.setRange(0, 1000)
-        self.num_weight_sb.setValue(10)
+        self.num_weight_sb.setValue(3)
 
         self.start_frame_sb = QtWidgets.QSpinBox()
         self.start_frame_sb.setRange(-100000, 100000)
@@ -350,7 +350,7 @@ class DemBonesUI(QtWidgets.QDialog):
             # set spinboxes to integer frame values
             self.start_frame_sb.setValue(int(round(min_t)))
             self.end_frame_sb.setValue(int(round(max_t)))
-            cmds.inViewMessage(amg='Timeline range set: <hl>{}</hl> - <hl>{}</hl>'.format(int(min_t), int(max_t)), pos='midCenter', fade=True, fadeInTime=0.1, fadeStayTime=1.0, fadeOutTime=0.2)
+            cmds.inViewMessage(amg='Timeline range set: <hl>{}</hl> - <hl>{}</hl>'.format(int(min_t), int(max_t)), pos='midCenter', fade=True, fadeInTime=0.1, fadeStayTime=4.0, fadeOutTime=0.2)
         except Exception as e:
             cmds.warning('Failed to read timeline range: {}'.format(e))
 
@@ -365,7 +365,7 @@ class DemBonesUI(QtWidgets.QDialog):
         db.num_iterations = int(self.num_iter_sb.value())
         db.num_transform_iterations = int(self.num_transform_sb.value())
         db.num_weight_iterations = int(self.num_weight_sb.value())
-        # bind_update is read from the combo's userData (int 1/2/3)
+        # bind_update is read from the combo's userData (int value)
         try:
             db.bind_update = int(self.bind_combo.currentData())
         except Exception:
@@ -388,13 +388,10 @@ class DemBonesUI(QtWidgets.QDialog):
         # Optionally create animation keys for influences
         if self.create_keys_cb.isChecked():
             # Use db's read-only start/end if available, otherwise use local values
-            s_frame = db.start_frame
-            e_frame = db.end_frame
             try:
-                for frame in range(s_frame, e_frame + 1):
+                for frame in range(db.start_frame, db.end_frame + 1):
                     for influence in db.influences:
-                        matrix = om2.MMatrix(db.anim_matrix(influence, frame))
-                        matrix = om2.MTransformationMatrix(matrix)
+                        matrix = om2.MTransformationMatrix(om2.MMatrix(db.anim_matrix(influence, frame)))
                         translate = matrix.translation(om2.MSpace.kWorld)
                         rotate = matrix.rotation().asVector()
 
