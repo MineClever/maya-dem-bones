@@ -436,6 +436,9 @@ public:
 		MatrixXd lr, lt, gb, lbr, lbt;
 		computeRTB(0, lr, lt, gb, lbr, lbt, false);
 
+		// adjsut joints struct, if updatebind ==2
+		reparentBones();
+
 		influencesNameMaya = boneName; // copy names.
 		// Easy method to copy maya bones.
 		for (int j = 0; j < nB; j++) {
@@ -550,22 +553,28 @@ public:
 			jname = jointFn.setName(jname, false, &st);
 			CHECK_MSTATUS_AND_THROW(st);
 
-			// Place joint at translation position from bind matrix (use world space so reparenting won't change world position)
-			st = jointFn.setTranslation(pos, MSpace::kTransform);
+			// Place joint at translation position from bind matrix
+			st = jointFn.setTranslation(pos, MSpace::kObject);
 			CHECK_MSTATUS_AND_THROW(st);
 
 			// Record bone names and indices to the model
 			boneName.push_back(name);
 			boneIndex[name] = j;
-			bonesMayaDagpathArray.append(jointFn.dagPath());
+			MDagPath boneDagPath = Conversion::toMDagPath(name, false);
+			bonesMayaDagpathArray.append(boneDagPath);
 		}
 
+	}
+
+	void reparentBones() {
+	
 		// If parent information exists, build parent-child relationships according to parent array
 		// parent is ArrayXi, -1 denotes root
 		// Use MDagModifier to batch reparent and call doIt() once at the end
 		MDagModifier dagMod;
+		MStatus& st = status;
 		bool hasParentInfo = (parent.size() == nB);
-		if (hasParentInfo) {
+		if (hasParentInfo && (bindUpdate == 2)) {
 			std::lock_guard<std::mutex> lock(mtx_);
 			for (int j = 0; j < nB; ++j) {
 				int p = parent(j);
@@ -573,12 +582,17 @@ public:
 					MObject childObj = bonesMayaDagpathArray[j].node();
 					MObject parentObj = bonesMayaDagpathArray[p].node();
 					st = dagMod.reparentNode(childObj, parentObj);
-					CHECK_MSTATUS_AND_THROW(st);
+					if (st.statusCode() != MStatus::kSuccess)
+					{
+						LOG("Can't set parent as :" << p << "for joint index :" << j << " -> Skip.");
+						continue;
+					}
 				}
 			}
 			st = dagMod.doIt();
 			CHECK_MSTATUS_AND_THROW(st);
 		}
+	
 	}
 
 	void updateResultSkinWeight(string& skin_mesh)

@@ -116,10 +116,20 @@ class DemBonesUI(QtWidgets.QDialog):
         self.max_influences_sb.setRange(1, 10)
         self.max_influences_sb.setValue(4)
         
-        self.bind_cb = QtWidgets.QCheckBox()
-        self.bind_cb.setChecked(False)
-        # TODO: Change to combatBox
-        
+        # bind_update: switched from checkbox to combo box supporting integer values (now 0/1/2)
+        self.bind_combo = QtWidgets.QComboBox()
+        # Add items: display text, userData = int value
+        # Bind transformation update, 0=keep original, 1=set translations to p-norm centroids (using #transAffineNorm) and rotations to identity, 2=do 1 and group joints, default = 0
+        self.bind_combo.addItem("0 - keep original", 0)
+        self.bind_combo.setItemData(0, "keep original after compute.", QtCore.Qt.ToolTipRole)
+        self.bind_combo.addItem("1 - update Translate&Rotate", 1)
+        self.bind_combo.setItemData(1, "set translations to p-norm centroids (using #transAffineNorm) and rotations to identity.", QtCore.Qt.ToolTipRole)
+        self.bind_combo.addItem("2 - do 1 and group joints", 2)
+        self.bind_combo.setItemData(2, "set translations to p-norm centroids (using #transAffineNorm) and rotations to identity.Also group to cluster", QtCore.Qt.ToolTipRole)
+        self.bind_combo.setCurrentIndex(0)
+        self.bind_combo.setToolTip("Select bind update mode (returns int 0/1/2)")
+        self.bind_combo.currentIndexChanged.connect(self._on_bind_combo_changed)
+
 
         self.add_joint_root = QtWidgets.QCheckBox()
         self.add_joint_root.setChecked(True)
@@ -129,11 +139,12 @@ class DemBonesUI(QtWidgets.QDialog):
         self.num_bone_sb.setValue(100)
 
         root_label = QtWidgets.QLabel("auto_root:")
-        root_label.setToolTip("If checked, a root joint will be created to parent all generated bones.")
+        root_label.setToolTip("If checked, a root joint will be created to parent all generated bones if needed.")
         root_label.setWordWrap(True)
         
         bone_params_layout.addWidget(QtWidgets.QLabel("bind_update:"), 0, 0)
-        bone_params_layout.addWidget(self.bind_cb, 0, 1)
+        bone_params_layout.addWidget(self.bind_combo, 0, 1)
+
         bone_params_layout.addWidget(root_label, 1, 0)
         bone_params_layout.addWidget(self.add_joint_root, 1, 1)
         bone_params_layout.addWidget(QtWidgets.QLabel("num_bones:"), 2, 0)
@@ -154,8 +165,9 @@ class DemBonesUI(QtWidgets.QDialog):
         # Option to create animation keys for influences
         self.create_keys_cb = QtWidgets.QCheckBox("Create animation keys for influences")
         self.create_keys_cb.setChecked(True)
-        bone_params_layout.addWidget(self.apply_weights_cb)
-        bone_params_layout.addWidget(self.create_keys_cb)
+        
+        bone_params_layout.addWidget(self.apply_weights_cb,5,0)
+        bone_params_layout.addWidget(self.create_keys_cb,5,1)
 
         btn_row = QtWidgets.QHBoxLayout()
         btn_row.addStretch()
@@ -225,6 +237,15 @@ class DemBonesUI(QtWidgets.QDialog):
             self.skincluster_le.clear()
             cmds.inViewMessage(amg='No skinCluster found for <hl>{}</hl>'.format(mesh_name), pos='midCenter', fade=True, fadeInTime=0.1, fadeStayTime=1.0, fadeOutTime=0.2)
 
+    def _on_bind_combo_changed(self, index: int):
+        """Update the bind description label when the combo selection changes."""
+        try:
+            desc = self.bind_combo.itemData(index, QtCore.Qt.ToolTipRole) or ""
+            cmds.inViewMessage(amg='Bind Update mode: <hl>{}</hl>'.format(desc), pos='midCenter', fade=True, fadeInTime=0.1, fadeStayTime=1.0, fadeOutTime=0.2)
+        except Exception:
+            # safe-guard: ignore UI update errors
+            pass
+
     def _create_root_joint_if_needed(self, db):
         # type: (dem_bones.DemBones) -> None
         if self.add_joint_root.isChecked() == False:
@@ -233,8 +254,7 @@ class DemBonesUI(QtWidgets.QDialog):
         if (db.bind_update == 2):
             cmds.warning("will not Create root joint, bind_update == 2.")
             return
-        
-        
+
         if not cmds.objExists("root"):
             dagMod = om2.MDagModifier()
             joint_root_node = dagMod.createNode("joint") #type: om2.MObject
@@ -286,14 +306,18 @@ class DemBonesUI(QtWidgets.QDialog):
         # TODO: If we set a skinMesh as VertexAnimMesh, we should create a copy mesh for skinCluster application
         if not self.skincluster_le.text().strip():
             cmds.warning("No skinCluster specified to apply weights. Create one first for <%s>." % db.skin_mesh_shape_name)
+
             for influence in db.influences:
                 matrix = om2.MMatrix(db.bind_matrix(influence))
-                cmds.xform(influence, matrix=matrix, worldSpace=True) # set bind pose
+                cmds.xform(influence, matrix=matrix, os=True) # set bind pose
             cmds.skinCluster(tgt_name, *db.influences, tsb=True, mi=db.max_influences) # type: list[str]
-            
-            self._create_root_joint_if_needed(db)
-            
+
             self._auto_detect_skincluster_from(tgt_name)
+        
+        self._create_root_joint_if_needed(db)
+        if int(self.bind_combo.currentData()) >= 1:
+            cmds.warning("Need Update bindPose.")
+        
         db.update_result_skin_weight(tgt_name)
         
 
@@ -341,7 +365,11 @@ class DemBonesUI(QtWidgets.QDialog):
         db.num_iterations = int(self.num_iter_sb.value())
         db.num_transform_iterations = int(self.num_transform_sb.value())
         db.num_weight_iterations = int(self.num_weight_sb.value())
-        db.bind_update = 1 if self.bind_cb.isChecked() else 0
+        # bind_update is read from the combo's userData (int 1/2/3)
+        try:
+            db.bind_update = int(self.bind_combo.currentData())
+        except Exception:
+            db.bind_update = 0
         db.num_bones = int(self.num_bone_sb.value())
         db.init_iterations = int(self.init_iterations_sb.value())
         db.max_influences = int(self.max_influences_sb.value())
