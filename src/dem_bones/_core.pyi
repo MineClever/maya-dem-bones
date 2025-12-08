@@ -102,7 +102,10 @@ class DemBones:
     """用于锁定权重的颜色集名称，默认 'demLock'。"""
 
     lock_bone_attr_name: str
-    """用于锁定骨骼变换的属性名称，默认 'demLockBones'。"""
+    """用于锁定骨骼变换的属性名称，默认 'demLock'。"""
+
+    bone_name_prefix: str
+    """Init创建骨骼时的骨骼名称前缀"""
 
     start_frame: int
     """求解的起始帧。"""

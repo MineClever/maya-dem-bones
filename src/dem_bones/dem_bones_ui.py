@@ -223,7 +223,6 @@ class DemBonesUI(QtWidgets.QDialog):
         self.num_weight_sb.setRange(0, 1000)
         self.num_weight_sb.setValue(3)
 
-
         self.affine_norm_sb = QtWidgets.QDoubleSpinBox()
         self.affine_norm_sb.setRange(1.0, 10.0)
         self.affine_norm_sb.setValue(4.0)
@@ -246,14 +245,10 @@ class DemBonesUI(QtWidgets.QDialog):
         params_group.setContentLayout(params_layout)
         layout.addWidget(params_group)
 
+        
+         #--------------------- DemBones Init Parameters ------------------#
         bone_params_group = CollapsibleGroupBox("DemBones Init Parameters", collapsed=True)
         bone_params_layout = QtWidgets.QGridLayout()
-        
-        init_iterations_label = QtWidgets.QLabel("init_iterations:")
-        init_iterations_label.setToolTip("Number of iterations during initialization phase.")
-        self.init_iterations_sb = QtWidgets.QSpinBox()
-        self.init_iterations_sb.setRange(1, 1000)
-        self.init_iterations_sb.setValue(10)
         
         # bind_update: switched from checkbox to combo box supporting integer values (now 0/1/2)
         self.bind_combo = QtWidgets.QComboBox()
@@ -273,26 +268,50 @@ class DemBonesUI(QtWidgets.QDialog):
         self.add_joint_root = QtWidgets.QCheckBox()
         self.add_joint_root.setChecked(True)
 
-        self.num_bone_sb = QtWidgets.QSpinBox()
-        self.num_bone_sb.setRange(-1, 99999)
-        self.num_bone_sb.setValue(100)
-
+        bone_params_layout.addWidget(QtWidgets.QLabel("bind_update:"), 0, 0)
+        bone_params_layout.addWidget(self.bind_combo, 0, 1)
+        
         root_label = QtWidgets.QLabel("auto_root:")
         root_label.setToolTip("If checked, a root joint will be created to parent all generated bones if needed.")
         root_label.setWordWrap(True)
-        
-        bone_params_layout.addWidget(QtWidgets.QLabel("bind_update:"), 0, 0)
-        bone_params_layout.addWidget(self.bind_combo, 0, 1)
-
         bone_params_layout.addWidget(root_label, 1, 0)
         bone_params_layout.addWidget(self.add_joint_root, 1, 1)
+
+        self.num_bone_sb = QtWidgets.QSpinBox()
+        self.num_bone_sb.setRange(-1, 99999)
+        self.num_bone_sb.setValue(100)
         bone_params_layout.addWidget(QtWidgets.QLabel("num_bones:"), 2, 0)
         bone_params_layout.addWidget(self.num_bone_sb, 2, 1)
-
+        
+        init_iterations_label = QtWidgets.QLabel("init_iterations:")
+        init_iterations_label.setToolTip("Number of iterations during initialization phase.")
+        self.init_iterations_sb = QtWidgets.QSpinBox()
+        self.init_iterations_sb.setRange(1, 1000)
+        self.init_iterations_sb.setValue(10)
         bone_params_layout.addWidget(init_iterations_label, 3, 0)
         bone_params_layout.addWidget(self.init_iterations_sb, 3, 1)
 
-        
+        init_bone_name_label = QtWidgets.QLabel("bone_name_prefix:")
+        init_bone_name_label.setToolTip("Generated bon prefix name")
+        self.init_bone_name_input = QtWidgets.QLineEdit()
+        self.init_bone_name_input.setText("def_bone_")
+        bone_params_layout.addWidget(init_bone_name_label, 4, 0)
+        bone_params_layout.addWidget(self.init_bone_name_input, 4, 1)
+
+        lock_weights_set_name_label = QtWidgets.QLabel("lock_weights_set:")
+        lock_weights_set_name_label.setToolTip("Name of the color set used to lock weights, default = 'demLock'")
+        self.lock_weights_set_name_input = QtWidgets.QLineEdit()
+        self.lock_weights_set_name_input.setText("demLock")
+        bone_params_layout.addWidget(lock_weights_set_name_label, 5, 0)
+        bone_params_layout.addWidget(self.lock_weights_set_name_input, 5, 1)
+
+        lock_bone_attr_name_label = QtWidgets.QLabel("lock_bone_attr_name:")
+        lock_bone_attr_name_label.setToolTip("Name of the color set used to lock weights, default = 'demLock'")
+        self.lock_bone_attr_name_input = QtWidgets.QLineEdit()
+        self.lock_bone_attr_name_input.setText("demLock")
+        bone_params_layout.addWidget(lock_bone_attr_name_label, 6, 0)
+        bone_params_layout.addWidget(self.lock_bone_attr_name_input, 6, 1)
+
         bone_params_group.setContentLayout(bone_params_layout)
         layout.addWidget(bone_params_group)
 
@@ -391,7 +410,10 @@ class DemBonesUI(QtWidgets.QDialog):
             om2.MFnDagNode(joint_root_node).setName("root")
             # NOTE: Add attaribute to lock bones, and show it in channel box
             numAttr = om2.MFnNumericAttribute()
-            demLockAttr = numAttr.create("demLock", "demLock", om2.MFnNumericData.kBoolean, 1)
+            db_lock_bone_attr_name_input = self.lock_bone_attr_name_input.text().strip()
+            if not db_lock_bone_attr_name_input:
+                db_lock_bone_attr_name_input = "demLock"
+            demLockAttr = numAttr.create(db_lock_bone_attr_name_input, db_lock_bone_attr_name_input, om2.MFnNumericData.kBoolean, 1)
             numAttr.keyable = True
             fnNode = om2.MFnDependencyNode(joint_root_node)
             fnNode.addAttribute(demLockAttr)
@@ -491,18 +513,36 @@ class DemBonesUI(QtWidgets.QDialog):
             return
 
         db = dem_bones.DemBones()
+        
         db.num_iterations = int(self.num_iter_sb.value())
         db.num_transform_iterations = int(self.num_transform_sb.value())
         db.num_weight_iterations = int(self.num_weight_sb.value())
+        
         # bind_update is read from the combo's userData (int value)
         try:
             db.bind_update = int(self.bind_combo.currentData())
         except Exception:
             db.bind_update = 0
+        
         db.num_bones = int(self.num_bone_sb.value())
         db.init_iterations = int(self.init_iterations_sb.value())
-        db.max_influences = int(self.max_influences_sb.value())
+        
+        db.translation_affine = float(self.affine_sb.value())
+        db.translation_affine_norm = float(self.affine_norm_sb.value())
 
+        db.max_influences = int(self.max_influences_sb.value())
+        db.weights_smooth = float(self.weights_smooth_sb.value())
+        db.weights_smooth_step = float(self.weights_smooth_step_sb.value())
+        
+        db_lock_weights_set_name_input = self.lock_weights_set_name_input.text().strip()
+        if not db_lock_weights_set_name_input:
+            db_lock_weights_set_name_input = "demLock"
+        db.lock_weights_set = db_lock_weights_set_name_input
+
+        db_lock_bone_attr_name_input = self.lock_bone_attr_name_input.text().strip()
+        if not db_lock_bone_attr_name_input:
+            db_lock_bone_attr_name_input = "demLock"
+        db.lock_bone_attr_name = db_lock_bone_attr_name_input
 
         start_frame = int(self.start_frame_sb.value())
         end_frame = int(self.end_frame_sb.value())

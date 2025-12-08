@@ -41,8 +41,10 @@ public:
 
 	double tolerance;
 	int patience;
-	char* lockWeightsSet = "demLock";
-    char* lockWeightsAttr = "demLock";
+
+	MString lockWeightsSet = "demLock";
+	MString lockBoneTransformAttrName = "demLock";
+    MString boneNamePrefix = "def_bone_";
 
     MString sourceDagShapePathName = "";
     MString targetDagShapePathName = "";
@@ -171,7 +173,7 @@ public:
 		}
 
 		// update model: weights locked
-		MString colourSet = lockWeightsSet;
+		MString& colourSet = lockWeightsSet;
 		if (mesh.hasColorChannels(colourSet)) {
 			MColorArray colours;
 			status = mesh.getVertexColors(colours, &colourSet);
@@ -282,7 +284,7 @@ public:
 			}
 
 			// get dem lock
-			MPlug demLockPlug = boneDagFn.findPlug(lockWeightsAttr, &status);
+			MPlug demLockPlug = boneDagFn.findPlug(lockBoneTransformAttrName, &status);
 			if (MS::kSuccess == status) 
 				lockM(j) = demLockPlug.asInt(); 
 			else lockM(j) = 0;
@@ -725,6 +727,8 @@ PYBIND11_MODULE(_core, m) {
 		.def_readwrite("tolerance", &DemBonesModel::tolerance, "Convergence tolerance, default = 1e-3")
 		.def_readwrite("patience", &DemBonesModel::patience, "Number of iterations to wait before declaring convergence, default = 3")
 		.def_readwrite("lock_weights_set", &DemBonesModel::lockWeightsSet, "Name of the color set used to lock weights, default = 'demLock'")
+        .def_readwrite("lock_bone_attr_name", &DemBonesModel::lockBoneTransformAttrName, "Name of the attribute used to lock bone transformations, default = 'demLock'")
+        .def_readwrite("bone_name_prefix", &DemBonesModel::boneNamePrefix, "Prefix for auto-created bone names, default = 'def_bone_'")
 		.def_readwrite("num_bones", &DemBonesModel::numBones, "If >0 and no influences found, number of bones to create automatically (default: -1 -> create 1 bone)")
 		.def_readonly("start_frame", &DemBonesModel::sF, "Start frame of solver")
 		.def_readonly("end_frame", &DemBonesModel::eF, "End frame of solver")
