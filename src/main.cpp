@@ -32,7 +32,7 @@ public:
 	using Super = DemBonesExt<double, float>;
 	int sF = 1001;
 	int eF = 1010;
-	vector<string> bonesMaya;
+	vector<string> influencesNameMaya;
 	vector<double> weightsMaya;
 	MDagPathArray bonesMayaDagpathArray;
 	map<string, MMatrix> bindMatricesMaya;
@@ -94,7 +94,7 @@ public:
 		MDoubleArray weights;
 		MDagPath boneParentMaya;
 		//MDagPathArray bonesMaya;
-		MDagPathArray& bonesMaya = bonesMayaDagpathArray;
+		MDagPathArray& bonesDagpathArray = bonesMayaDagpathArray;
 		map<string, MatrixXd, less<string>, aligned_allocator<pair<const string, MatrixXd>>> mT;
 		map<string, VectorXd, less<string>, aligned_allocator<pair<const string, VectorXd>>> wT;
 		map<string, Matrix4d, less<string>, aligned_allocator<pair<const string, Matrix4d>>> bindMatrices;
@@ -133,13 +133,13 @@ public:
 		if (MS::kSuccess == status) {
 			// query bones
 			MFnSkinCluster skinCluster(rootNode);
-			nB = skinCluster.influenceObjects(bonesMaya, &status);
+			nB = skinCluster.influenceObjects(bonesDagpathArray, &status);
 			CHECK_MSTATUS_AND_THROW(status);
 
 			// get bones names
 			boneName.resize(nB);
 			for (int j = 0; j < nB; j++) {
-				string name = bonesMaya[j].partialPathName().asUTF8();
+				string name = bonesDagpathArray[j].partialPathName().asUTF8();
 				boneName[j] = name;
 				boneIndex[name] = j;
 			}
@@ -184,10 +184,10 @@ public:
 		// update model: skeleton
 		for (int j = 0; j < nB; j++) {
 			// get name
-			string name = boneName[j];
+			string& name = boneName[j];
 
 			// get parent
-			MObject boneObj = bonesMaya[j].node();
+			MObject boneObj = bonesDagpathArray[j].node();
 			MFnDagNode boneDagFn(boneObj, &status);
 			CHECK_MSTATUS_AND_THROW(status);
 			MObject boneParentObj = boneDagFn.parent(0);
@@ -208,7 +208,7 @@ public:
 
 			// get bind matrix
 			mT[name].resize(nF * 4, 4);
-			Matrix4d bindMatrix = Conversion::toMatrix4D(bonesMaya[j].inclusiveMatrix());
+			Matrix4d bindMatrix = Conversion::toMatrix4D(bonesDagpathArray[j].inclusiveMatrix());
 			bind.blk4(0, j) = bindMatrix;
 			bindMatrices[name] = bindMatrix;
 
@@ -300,7 +300,7 @@ public:
 				string name = boneName[j];
 
 				// set matrix
-				Matrix4d matrix = Conversion::toMatrix4D(bonesMaya[j].inclusiveMatrix());
+				Matrix4d matrix = Conversion::toMatrix4D(bonesDagpathArray[j].inclusiveMatrix());
 				mT[name].blk4(num, 0) = matrix * bindMatrices[name].inverse();
 			}
 		}
@@ -314,7 +314,7 @@ public:
 			string nj = boneName[j];
 
 			for (int k = 0; k < 9; k++) {
-				MFnDependencyNode node(bonesMaya[j].node(), &status);
+				MFnDependencyNode node(bonesDagpathArray[j].node(), &status);
 				CHECK_MSTATUS_AND_THROW(status);
 
 				MPlug plug = node.findPlug(transformAttributes[k], &status);
@@ -436,11 +436,12 @@ public:
 		MatrixXd lr, lt, gb, lbr, lbt;
 		computeRTB(0, lr, lt, gb, lbr, lbt, false);
 
-
+		influencesNameMaya = boneName; // copy names.
+		// Easy method to copy maya bones.
 		for (int j = 0; j < nB; j++) {
 			std::lock_guard<std::mutex> lock(mtx_);
-			string name = boneName[j];
-			bonesMaya.push_back(name);
+			string& name = boneName[j];
+			
 			MVector translate = MVector(lbt(0, j), lbt(1, j), lbt(2, j));
 			MVector rotate = MVector(lbr(0, j), lbr(1, j), lbr(2, j));
 			
@@ -661,8 +662,8 @@ public:
 		{
 			MIntArray indices;
 
-			indices.setLength(bonesMaya.size());
-			for (auto i = 0; i < bonesMaya.size(); ++i) {
+			indices.setLength(influencesNameMaya.size());
+			for (auto i = 0; i < influencesNameMaya.size(); ++i) {
 				indices[i] = i;
 			}
 
@@ -713,7 +714,7 @@ PYBIND11_MODULE(_core, m) {
 		.def_readwrite("num_bones", &DemBonesModel::numBones, "If >0 and no influences found, number of bones to create automatically (default: -1 -> create 1 bone)")
 		.def_readonly("start_frame", &DemBonesModel::sF, "Start frame of solver")
 		.def_readonly("end_frame", &DemBonesModel::eF, "End frame of solver")
-		.def_readonly("influences", &DemBonesModel::bonesMaya, "List of all influences")
+		.def_readonly("influences", &DemBonesModel::influencesNameMaya, "List of all influences")
 		.def_readonly("weights", &DemBonesModel::weightsMaya, "List of weights for all influences and vertices")
 		.def("rmse", &DemBonesModel::rmse, "Root mean squared reconstruction error")
 		.def("compute", &DemBonesModel::compute, "Skinning decomposition of alternative updating weights and bone transformations", py::arg("source"), py::arg("target"), py::arg("start_frame"), py::arg("end_frame"))

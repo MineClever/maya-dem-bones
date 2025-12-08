@@ -118,6 +118,8 @@ class DemBonesUI(QtWidgets.QDialog):
         
         self.bind_cb = QtWidgets.QCheckBox()
         self.bind_cb.setChecked(False)
+        # TODO: Change to combatBox
+        
 
         self.add_joint_root = QtWidgets.QCheckBox()
         self.add_joint_root.setChecked(True)
@@ -228,24 +230,40 @@ class DemBonesUI(QtWidgets.QDialog):
         if self.add_joint_root.isChecked() == False:
             return
         
-        dagMod = om2.MDagModifier()
-        joint_root_node = dagMod.createNode("joint") #type: om2.MObject
-        dagMod.doIt()
-        om2.MFnDagNode(joint_root_node).setName("root")
-        # NOTE: Add attaribute to lock bones, and show it in channel box
-        numAttr = om2.MFnNumericAttribute()
-        demLockAttr = numAttr.create("demLock", "demLock", om2.MFnNumericData.kBoolean, 1)
-        numAttr.keyable = True
-        fnNode = om2.MFnDependencyNode(joint_root_node)
-        fnNode.addAttribute(demLockAttr)
+        if (db.bind_update == 2):
+            cmds.warning("will not Create root joint, bind_update == 2.")
+            return
+        
+        
+        if not cmds.objExists("root"):
+            dagMod = om2.MDagModifier()
+            joint_root_node = dagMod.createNode("joint") #type: om2.MObject
+            dagMod.doIt()
+            om2.MFnDagNode(joint_root_node).setName("root")
+            # NOTE: Add attaribute to lock bones, and show it in channel box
+            numAttr = om2.MFnNumericAttribute()
+            demLockAttr = numAttr.create("demLock", "demLock", om2.MFnNumericData.kBoolean, 1)
+            numAttr.keyable = True
+            fnNode = om2.MFnDependencyNode(joint_root_node)
+            fnNode.addAttribute(demLockAttr)
+        else:
+            maya_temp_selection_list = om2.MSelectionList()
+            maya_temp_selection_list.add("root")
+            joint_root_node = maya_temp_selection_list.getDependNode(0)  #type: om2.MObject
         
         maya_selection_list = om2.MSelectionList()
+        
         for jnt in db.influences:
             maya_selection_list.add(jnt)
+
         select_iter = om2.MItSelectionList(maya_selection_list)
+        
         while not select_iter.isDone():
-            jnt_obj = select_iter.getDependNode()
-            dagMod.reparentNode(jnt_obj, joint_root_node)
+            jnt_obj = select_iter.getDependNode() # type: om2.MObject
+            parent_obj = om2.MFnDagNode(jnt_obj).parent(0)# type: om2.MObject
+            parent_name = om2.MFnDagNode(parent_obj).name() # type: str
+            if parent_name == "world":
+                dagMod.reparentNode(jnt_obj, joint_root_node)
             select_iter.next()
         dagMod.doIt()
 
@@ -327,6 +345,7 @@ class DemBonesUI(QtWidgets.QDialog):
         db.num_bones = int(self.num_bone_sb.value())
         db.init_iterations = int(self.init_iterations_sb.value())
         db.max_influences = int(self.max_influences_sb.value())
+
 
         start_frame = int(self.start_frame_sb.value())
         end_frame = int(self.end_frame_sb.value())
