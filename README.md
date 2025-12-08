@@ -42,6 +42,7 @@ on the influence. You can extend the functionality of the class by creating
 a subclass that will allow you to recreate the animation, drive the helper 
 joints with an RBF network using the newly calculated matrices etc.
 
++ for script usage
 ```python
 
 import dem_bones
@@ -53,6 +54,12 @@ print(db.influences)
 print(db.weights)
 print(db.bind_matrix("jaw_JNT"))
 print(db.anim_matrix("jaw_JNT", 1005))
+```
+
++ for UI usage
+```python
+import dem_bones.dem_bones_ui as db_ui
+db_ui.show()
 ```
 
 ### Example
