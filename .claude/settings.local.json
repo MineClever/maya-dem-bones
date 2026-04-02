@@ -37,7 +37,11 @@
       "Bash(powershell -NoProfile -Command \"\nAdd-Type -AssemblyName System.IO.Compression.FileSystem\n\\\\$zip = [System.IO.Compression.ZipFile]::OpenRead\\('D:\\\\_Codes\\\\ManagedCodes\\\\Git\\\\maya-dem-bones\\\\dist\\\\dem_bones-1.0.0-cp37-cp37m-win_amd64.whl'\\)\n\\\\$zip.Entries | Select-Object FullName | Sort-Object FullName\n\\\\$zip.Dispose\\(\\)\n\")",
       "Bash(powershell -NoProfile -Command \"\nRemove-Item -Recurse -Force 'D:\\\\_Codes\\\\ManagedCodes\\\\Git\\\\maya-dem-bones\\\\_skbuild' -ErrorAction SilentlyContinue\nRemove-Item -Recurse -Force 'D:\\\\_Codes\\\\ManagedCodes\\\\Git\\\\maya-dem-bones\\\\dist' -ErrorAction SilentlyContinue\nWrite-Host 'Cleaned _skbuild and dist'\n\")",
       "Bash(powershell -NoProfile -Command \"\nGet-Content 'C:\\\\Users\\\\zzheng\\\\AppData\\\\Local\\\\Temp\\\\build_log.txt' | Select-String -Pattern '\\(warning C\\\\d|error C\\\\d|C\\\\d\\\\d\\\\d\\\\d\\)' | Select-Object -First 40 | ForEach-Object { \\\\$_.Line.Trim\\(\\) }\n\" 2>&1)",
-      "Bash(powershell -NoProfile -Command \"\nTest-Path 'D:\\\\_Codes\\\\ManagedCodes\\\\Git\\\\maya-dem-bones\\\\src\\\\dem_bones\\\\_core.pyi'\n\")"
+      "Bash(powershell -NoProfile -Command \"\nTest-Path 'D:\\\\_Codes\\\\ManagedCodes\\\\Git\\\\maya-dem-bones\\\\src\\\\dem_bones\\\\_core.pyi'\n\")",
+      "Bash(powershell -NoProfile -Command \"\nGet-Content 'D:\\\\_Codes\\\\ManagedCodes\\\\Git\\\\maya-dem-bones\\\\extern\\\\pybind11\\\\include\\\\pybind11\\\\detail\\\\common.h' | Select-String 'PY_VERSION_HEX < 0x03|require.*Python 3|minimum.*Python|python_2_support|BYE' | ForEach-Object { \\\\\"{0}: {1}\\\\\" -f \\\\$_.LineNumber, \\\\$_.Line.Trim\\(\\) }\n\")",
+      "Bash(powershell -NoProfile -Command \"\n\\\\$lines = Get-Content 'D:\\\\_Codes\\\\ManagedCodes\\\\Git\\\\maya-dem-bones\\\\extern\\\\pybind11\\\\include\\\\pybind11\\\\detail\\\\common.h'\n\\\\$lines[264..275] | ForEach-Object -Begin { \\\\$i=265 } -Process { \\\\\"{0}: {1}\\\\\" -f \\\\$i++, \\\\$_ }\n\")",
+      "Bash(powershell -NoProfile -Command \"\nSet-Location 'D:\\\\_Codes\\\\ManagedCodes\\\\Git\\\\maya-dem-bones'\n\\\\$cmake = 'C:\\\\Program Files\\\\CMake\\\\bin\\\\cmake.exe'\nWrite-Host '=== cmake build ===' -ForegroundColor Cyan\n& \\\\$cmake --build '_build_py27' --config Release 2>&1\n\" 2>&1)",
+      "Bash(powershell -NoProfile -Command \"Get-ChildItem 'D:\\\\_Codes\\\\ManagedCodes\\\\Git\\\\maya-dem-bones\\\\dist\\\\*.whl' | Select-Object Name\")"
     ]
   }
 }

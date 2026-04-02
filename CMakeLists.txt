@@ -26,8 +26,12 @@ find_package(OpenMP)
 find_package(Maya REQUIRED)
 find_package(MayaPython REQUIRED)
 
-# 添加 pybind11
-add_subdirectory(extern/pybind11)
+# 添加 pybind11（Python 2.7 使用 v2.9.2，Python 3 使用最新版）
+if(MAYA_PYTHON_VERSION EQUAL 2)
+    add_subdirectory(extern/pybind11_py27)
+else()
+    add_subdirectory(extern/pybind11)
+endif()
 
 # 创建 Eigen INTERFACE target
 add_library(Eigen INTERFACE)

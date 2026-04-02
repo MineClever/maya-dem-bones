@@ -9,6 +9,7 @@
 dist
 build
 _skbuild
+_build_*/
 eggs
 parts
 bin
