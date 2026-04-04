@@ -86,15 +86,15 @@ if defined _MAYA_PYTHON_VERSION (
     goto :resolve_executable
 )
 
-:: Default: >=2022 -> Python 3, older -> Python 2
-if !_MAYA_VERSION! GEQ 2022 (
+:: Default: >=2023 -> Python 3, older -> Python 2
+if !_MAYA_VERSION! GEQ 2023 (
     set "_MAYA_PYTHON_VERSION=3"
 ) else (
     set "_MAYA_PYTHON_VERSION=2"
 )
 
 :: Maya 2022 ships both Python 2 and 3 -- ask the user
-if "!_MAYA_VERSION!"=="2022" (
+if "_MAYA_VERSION!">="2022" (
     echo.
     echo  Maya 2022 supports both Python 2 and Python 3:
     echo  ------------------------------------------------
