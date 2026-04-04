@@ -67,7 +67,7 @@ if "!_MODE!"=="wheel" (
     "%MAYA_PYTHON_EXECUTABLE%" "%~dp0setup.py" bdist_wheel
 ) else (
     echo Installing  --  Maya %MAYA_VERSION%  Python %MAYA_PYTHON_VERSION%
-    "%MAYA_PYTHON_EXECUTABLE%" -m pip install .
+    "%MAYA_PYTHON_EXECUTABLE%" -m pip install "%~dp0." --no-build-isolation --user
 )
 goto :done
 
