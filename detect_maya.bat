@@ -94,7 +94,7 @@ if !_MAYA_VERSION! GEQ 2023 (
 )
 
 :: Maya 2022 ships both Python 2 and 3 -- ask the user
-if "_MAYA_VERSION!">="2022" (
+if "_MAYA_VERSION!"=="2022" (
     echo.
     echo  Maya 2022 supports both Python 2 and Python 3:
     echo  ------------------------------------------------
