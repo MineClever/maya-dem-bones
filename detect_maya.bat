@@ -25,12 +25,9 @@ if defined _MAYA_VERSION (
 )
 
 :: Query registry for installed Maya versions (4-digit year keys)
+:: PowerShell uses no pipes to avoid cmd.exe interception issues
 set "_COUNT=0"
-for /f "delims=" %%v in ('powershell -NoProfile -Command ^
-    "Get-ChildItem 'HKLM:\SOFTWARE\Autodesk\Maya' -ErrorAction SilentlyContinue ^
-    | Where-Object { $_.PSChildName -match '^\d{4}$' } ^
-    | Sort-Object { [int]$_.PSChildName } -Descending ^
-    | ForEach-Object { $_.PSChildName }" 2^>nul') do (
+for /f "delims=" %%v in ('powershell -NoProfile -Command "$k=Get-ChildItem HKLM:\SOFTWARE\Autodesk\Maya -EA 0;$r=@();foreach($x in $k){if($x.PSChildName.Length -eq 4){$r+=[int]$x.PSChildName}};[Array]::Sort($r);[Array]::Reverse($r);$r" 2^>nul') do (
     set /a "_COUNT+=1"
     set "_VER_!_COUNT!=%%v"
 )
@@ -42,20 +39,16 @@ if !_COUNT! == 0 (
     exit /b 1
 )
 
-if !_COUNT! == 1 (
-    set "_MAYA_VERSION=!_VER_1!"
-    echo [detect_maya] Found Maya !_MAYA_VERSION!
-    goto :resolve_location
-)
-
-:: Multiple versions found -- show menu
+:: Always show the version menu so the user can confirm / choose
 echo.
-echo [detect_maya] Multiple Maya installations found:
+echo  Available Maya installations:
+echo  ------------------------------------------------
 for /l %%i in (1,1,!_COUNT!) do (
-    echo   [%%i] Maya !_VER_%%i!
+    echo   [%%i]  Maya !_VER_%%i!
 )
+echo  ------------------------------------------------
 echo.
-set /p "_CHOICE=Select version (1=latest, Enter=default 1): "
+set /p "_CHOICE= Select version (Enter = default [1]): "
 if "!_CHOICE!"=="" set "_CHOICE=1"
 
 :: Validate choice is a number in range
@@ -64,7 +57,7 @@ for /l %%i in (1,1,!_COUNT!) do (
     if "!_CHOICE!"=="%%i" set "_OK=1"
 )
 if "!_OK!"=="0" (
-    echo [detect_maya] Invalid choice '!_CHOICE!', using default (1).
+    echo [detect_maya] Invalid choice '!_CHOICE!', using default ^(1^).
     set "_CHOICE=1"
 )
 
@@ -74,9 +67,7 @@ echo [detect_maya] Selected Maya !_MAYA_VERSION!
 :resolve_location
 :: ---- Step 2: get install path from registry -----------------
 set "_MAYA_LOCATION="
-for /f "delims=" %%p in ('powershell -NoProfile -Command ^
-    "(Get-ItemProperty 'HKLM:\SOFTWARE\Autodesk\Maya\!_MAYA_VERSION!\Setup\InstallPath' ^
-    -ErrorAction SilentlyContinue).MAYA_INSTALL_LOCATION" 2^>nul') do (
+for /f "delims=" %%p in ('powershell -NoProfile -Command "$p=Get-ItemProperty HKLM:\SOFTWARE\Autodesk\Maya\!_MAYA_VERSION!\Setup\InstallPath -EA 0;$p.MAYA_INSTALL_LOCATION" 2^>nul') do (
     set "_MAYA_LOCATION=%%p"
 )
 
@@ -105,7 +96,13 @@ if !_MAYA_VERSION! GEQ 2022 (
 :: Maya 2022 ships both Python 2 and 3 -- ask the user
 if "!_MAYA_VERSION!"=="2022" (
     echo.
-    set /p "_PY_CHOICE=Maya 2022 supports Python 2 and 3. Choose version [2/3, default=3]: "
+    echo  Maya 2022 supports both Python 2 and Python 3:
+    echo  ------------------------------------------------
+    echo   [2]  Python 2.7  (mayapy2.exe)
+    echo   [3]  Python 3    (mayapy.exe)   ^<-- default
+    echo  ------------------------------------------------
+    echo.
+    set /p "_PY_CHOICE= Select Python version (Enter = default [3]): "
     if "!_PY_CHOICE!"=="2" set "_MAYA_PYTHON_VERSION=2"
     if "!_PY_CHOICE!"=="3" set "_MAYA_PYTHON_VERSION=3"
     :: any other input keeps the default (3)
