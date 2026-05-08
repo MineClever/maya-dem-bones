@@ -81,20 +81,36 @@ if not defined _MAYA_LOCATION (
 if "!_MAYA_LOCATION:~-1!"=="\" set "_MAYA_LOCATION=!_MAYA_LOCATION:~0,-1!"
 
 :: ---- Step 3: resolve Python version -------------------------
+:: Maya versions older than 2022 only ship Python 2. Maya 2022 can
+:: run either Python 2 or 3, and Maya 2023+ ships Python 3.
+if !_MAYA_VERSION! LSS 2022 (
+    if defined _MAYA_PYTHON_VERSION if not "!_MAYA_PYTHON_VERSION!"=="2" (
+        echo [detect_maya] Ignoring MAYA_PYTHON_VERSION=!_MAYA_PYTHON_VERSION!; Maya !_MAYA_VERSION! only supports Python 2.
+    )
+    set "_MAYA_PYTHON_VERSION=2"
+    goto :resolve_executable
+)
+
+if !_MAYA_VERSION! GEQ 2023 (
+    if defined _MAYA_PYTHON_VERSION if not "!_MAYA_PYTHON_VERSION!"=="3" (
+        echo [detect_maya] Ignoring MAYA_PYTHON_VERSION=!_MAYA_PYTHON_VERSION!; Maya !_MAYA_VERSION! only supports Python 3.
+    )
+    set "_MAYA_PYTHON_VERSION=3"
+    goto :resolve_executable
+)
+
 if defined _MAYA_PYTHON_VERSION (
+    if not "!_MAYA_PYTHON_VERSION!"=="2" if not "!_MAYA_PYTHON_VERSION!"=="3" (
+        echo [detect_maya] Invalid MAYA_PYTHON_VERSION=!_MAYA_PYTHON_VERSION!, using Python 3 for Maya 2022.
+        set "_MAYA_PYTHON_VERSION=3"
+    )
     echo [detect_maya] Using pre-set MAYA_PYTHON_VERSION=!_MAYA_PYTHON_VERSION!
     goto :resolve_executable
 )
 
-:: Default: >=2023 -> Python 3, older -> Python 2
-if !_MAYA_VERSION! GEQ 2023 (
+:: Maya 2022 ships both Python 2 and 3 -- ask the user.
+if "!_MAYA_VERSION!"=="2022" (
     set "_MAYA_PYTHON_VERSION=3"
-) else (
-    set "_MAYA_PYTHON_VERSION=2"
-)
-
-:: Maya 2022 ships both Python 2 and 3 -- ask the user
-if "_MAYA_VERSION!"=="2022" (
     echo.
     echo  Maya 2022 supports both Python 2 and Python 3:
     echo  ------------------------------------------------
@@ -124,6 +140,20 @@ if not exist "!_MAYA_PYTHON_EXECUTABLE!" (
     echo [detect_maya] ERROR: mayapy not found at: !_MAYA_PYTHON_EXECUTABLE!
     endlocal
     exit /b 1
+)
+
+set "_ACTUAL_PYTHON_VERSION="
+for /f "delims=" %%p in ('"!_MAYA_PYTHON_EXECUTABLE!" -c "import sys; print(sys.version_info[0])" 2^>nul') do (
+    set "_ACTUAL_PYTHON_VERSION=%%p"
+)
+
+if defined _ACTUAL_PYTHON_VERSION (
+    if not "!_ACTUAL_PYTHON_VERSION!"=="!_MAYA_PYTHON_VERSION!" (
+        echo [detect_maya] ERROR: Requested Python !_MAYA_PYTHON_VERSION!, but !_MAYA_PYTHON_EXECUTABLE! is Python !_ACTUAL_PYTHON_VERSION!.
+        echo              Clear MAYA_PYTHON_VERSION or set it to !_ACTUAL_PYTHON_VERSION! for Maya !_MAYA_VERSION!.
+        endlocal
+        exit /b 1
+    )
 )
 
 echo [detect_maya] Maya     : !_MAYA_VERSION!

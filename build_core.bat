@@ -1,6 +1,8 @@
 @echo off
 chcp 65001 >nul
 setlocal enabledelayedexpansion
+set "REPO_ROOT=%~dp0"
+if "%REPO_ROOT:~-1%"=="\" set "REPO_ROOT=%REPO_ROOT:~0,-1%"
 
 :: ============================================================
 :: build_core.bat  <mode>
@@ -59,7 +61,20 @@ if "%MAYA_PYTHON_VERSION%"=="2" goto :build_py27
 set "CMAKE_ARGS=-DMAYA_VERSION=%MAYA_VERSION% -DMAYA_PYTHON_VERSION=%MAYA_PYTHON_VERSION% -DCMAKE_POLICY_VERSION_MINIMUM=3.10"
 
 echo Installing build dependencies (Python 3)...
+"%MAYA_PYTHON_EXECUTABLE%" -m pip --version >nul 2>nul
+if errorlevel 1 (
+    echo [build] pip is not available in this Maya Python environment.
+    echo [build] Try bootstrapping pip first:
+    echo         "%MAYA_PYTHON_EXECUTABLE%" -m ensurepip --upgrade
+    echo         "%MAYA_PYTHON_EXECUTABLE%" -m pip install --upgrade pip
+    pause & exit /b 1
+)
+
 "%MAYA_PYTHON_EXECUTABLE%" -m pip install scikit-build setuptools wheel ninja cmake mypy
+if errorlevel 1 (
+    echo [build] Failed to install build dependencies.
+    pause & exit /b 1
+)
 echo.
 
 if "!_MODE!"=="wheel" (
@@ -69,12 +84,23 @@ if "!_MODE!"=="wheel" (
     echo Installing  --  Maya %MAYA_VERSION%  Python %MAYA_PYTHON_VERSION%
     "%MAYA_PYTHON_EXECUTABLE%" -m pip install "%~dp0." --no-build-isolation --user
 )
+if errorlevel 1 (
+    echo [build] Build/install failed.
+    pause & exit /b 1
+)
 goto :done
 
 :: ==============================================================
 :: Python 2.7 path  --  cmake direct  (scikit-build incompatible)
 :: ==============================================================
 :build_py27
+if not exist "%REPO_ROOT%\extern\pybind11_py27\CMakeLists.txt" (
+    echo [build] Missing Python 2 pybind11 submodule: extern\pybind11_py27
+    echo [build] Run:
+    echo         git submodule update --init extern/pybind11_py27
+    pause & exit /b 1
+)
+
 set "CMAKE_EXE=cmake"
 if exist "C:\Program Files\CMake\bin\cmake.exe" set "CMAKE_EXE=C:\Program Files\CMake\bin\cmake.exe"
 
@@ -90,7 +116,7 @@ echo Configuring cmake  --  Maya %MAYA_VERSION%  Python 2.7
     -DMAYA_PYTHON_VERSION=2 ^
     -DMAYA_INSTALL_BASE_PATH="%MAYA_LOCATION%\.." ^
     -DCMAKE_POLICY_VERSION_MINIMUM=3.5 ^
-    -B "%PY27_BUILD_DIR%" "%~dp0"
+    -B "%PY27_BUILD_DIR%" "%REPO_ROOT%"
 if errorlevel 1 (
     echo [build] cmake configure failed.
     pause & exit /b 1
@@ -124,6 +150,10 @@ if "!_MODE!"=="wheel" (
 ) else (
     echo Installing via setuptools  --  Python 2.7
     "%MAYA_PYTHON_EXECUTABLE%" "%~dp0setup_prebuilt.py" install
+)
+if errorlevel 1 (
+    echo [build] Build/install failed.
+    pause & exit /b 1
 )
 
 :done

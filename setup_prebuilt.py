@@ -3,11 +3,17 @@
 # The .pyd must already be present in src/dem_bones/ before running this script.
 #
 # Notes:
-#   - Explicitly sets name/version because setuptools < 30.3 does not auto-read setup.cfg.
+#   - Explicitly sets name/version because older build tools do not auto-read setup.cfg.
 #   - BinaryDistribution forces bdist_wheel to produce a platform-specific wheel
 #     (e.g. cp27-cp27-win_amd64) rather than a pure-Python wheel (py2-none-any).
-from setuptools import setup
-from setuptools.dist import Distribution
+#   - Maya Python 2.7 installs often lack setuptools, so install mode falls back
+#     to the standard-library distutils package.
+try:
+    from setuptools import setup
+    from setuptools.dist import Distribution
+except ImportError:
+    from distutils.core import setup
+    from distutils.dist import Distribution
 
 
 class BinaryDistribution(Distribution):

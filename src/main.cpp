@@ -12,6 +12,7 @@
 #include <DemBones/MatBlocks.h>
 
 #include <maya/MFnIkJoint.h>
+#include <maya/MFnSingleIndexedComponent.h>
 #include <maya/MDagModifier.h>
 #include <maya/MItGeometry.h>
 
@@ -677,18 +678,32 @@ public:
 		if (bFoundValidSkinCluster)
 		{
 			MIntArray indices;
+			MIntArray vertexIndices;
 
 			indices.setLength(influencesNameMaya.size());
 			for (auto i = 0; i < influencesNameMaya.size(); ++i) {
 				indices[i] = i;
 			}
 
+			vertexIndices.setLength(nV);
+			for (int i = 0; i < nV; ++i) {
+				vertexIndices[i] = i;
+			}
+
+			MFnSingleIndexedComponent componentFn;
+			MObject vertexComponents = componentFn.create(MFn::kMeshVertComponent, &status);
+			CHECK_MSTATUS_AND_THROW(status);
+			status = componentFn.addElements(vertexIndices);
+			CHECK_MSTATUS_AND_THROW(status);
+
+			MDoubleArray weightValues = Conversion::toMDoubleArray(weightsMaya);
+
 			LOG("Set weight to mesh" );
 			status = fnMayaSkinMesh->setWeights(
 				mayaSkinMeshDagpath,
-				fnMayaSkinMesh->getComponentAtIndex(0),
+				vertexComponents,
 				indices,
-				Conversion::toMDoubleArray(weightsMaya)
+				weightValues
 			);
 			CHECK_MSTATUS_AND_THROW(status);
 		}
