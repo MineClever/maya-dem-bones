@@ -145,7 +145,7 @@ if "!_COPIED!"=="0" (
 echo.
 
 if "!_MODE!"=="wheel" (
-    echo Building wheel  --  Python 2.7  ^(no scikit-build^)
+    echo Building wheel  --  Python 2.7  ^(no scikit-build / no pip required^)
     "%MAYA_PYTHON_EXECUTABLE%" "%~dp0setup_prebuilt.py" bdist_wheel
 ) else (
     echo Installing via setuptools  --  Python 2.7
